@@ -60,7 +60,6 @@ class GraphServer(ThreadedAsyncServer):
         self._command_lock = asyncio.Lock()
 
     async def shutdown(self) -> None:
-        logger.info('shutting down')
         for task in self._client_tasks.values():
             task.cancel()
             with suppress(asyncio.CancelledError):
@@ -73,7 +72,6 @@ class GraphServer(ThreadedAsyncServer):
                 with suppress(asyncio.CancelledError):
                     await lease_task
             info.leases.clear()
-        logger.info('leases released')
 
     async def api(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -118,10 +116,14 @@ class GraphServer(ThreadedAsyncServer):
                     info = self.shms.get(shm_name, None)
 
                 if info is None:
+                    await close_stream_writer(writer)
                     return
 
                 writer.write(Command.COMPLETE.value)
                 writer.write(encode_str(info.shm.name))
+
+                with suppress(asyncio.CancelledError):
+                    await info.lease(reader, writer)
 
             else:
                 # We only want to handle one command at a time
