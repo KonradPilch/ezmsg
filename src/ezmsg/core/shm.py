@@ -6,21 +6,10 @@ from dataclasses import dataclass, field
 from contextlib import contextmanager, suppress
 from multiprocessing import resource_tracker
 from multiprocessing.shared_memory import SharedMemory
-from uuid import getnode
 
-from .server import ThreadedAsyncServer, ServiceManager
 from .netprotocol import (
-    DEFAULT_SHM_SIZE,
     close_stream_writer,
-    Command,
-    encode_str,
-    uint64_to_bytes,
     bytes_to_uint,
-    read_str,
-    read_int,
-    SHMSERVER_PORT_DEFAULT,
-    SHMSERVER_ADDR_ENV,
-    AddressType,
 )
 
 logger = logging.getLogger("ezmsg")
@@ -116,7 +105,7 @@ class SHMContext:
         self, idx: int, readonly: bool = False
     ) -> typing.Generator[memoryview, None, None]:
         if self._shm.buf is None:
-            raise BufferError(f"cannot access {self._shm.name}: SHMServer disconnected")
+            raise BufferError(f"cannot access {self._shm.name}: server disconnected")
 
         with self._shm.buf[self._data_block_segs[idx]] as mem:
             if readonly:
@@ -174,100 +163,8 @@ class SHMInfo:
 
     def _release(self, task: "asyncio.Task[None]"):
         self.leases.discard(task)
+        logger.debug(f"discarded lease from {self.shm.name}")
         if len(self.leases) == 0:
             logger.debug(f"unlinking {self.shm.name}")
             self.shm.close()
             self.shm.unlink()
-
-
-class SHMServer(ThreadedAsyncServer):
-    node: int
-    shms: typing.Dict[str, SHMInfo]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.node = getnode()
-        self.shms = dict()
-
-    async def shutdown(self) -> None:
-        for info in self.shms.values():
-            for lease_task in list(info.leases):
-                lease_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await lease_task
-            info.leases.clear()
-
-    async def api(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        try:
-            cmd = await reader.read(1)
-            if len(cmd) == 0:
-                return
-
-            info: typing.Optional[SHMInfo] = None
-
-            if cmd == Command.SHM_CREATE.value:
-                num_buffers = await read_int(reader)
-                buf_size = await read_int(reader)
-
-                # Create segment
-                shm = SharedMemory(size=num_buffers * buf_size, create=True)
-                shm.buf[:] = b"0" * len(shm.buf)  # Guarantee zeros
-                shm.buf[0:8] = uint64_to_bytes(num_buffers)
-                shm.buf[8:16] = uint64_to_bytes(buf_size)
-                info = SHMInfo(shm)
-                self.shms[shm.name] = info
-                logger.debug(f"created {shm.name}")
-
-            elif cmd == Command.SHM_ATTACH.value:
-                shm_name = await read_str(reader)
-                info = self.shms.get(shm_name, None)
-
-            if info is None:
-                return
-
-            writer.write(Command.COMPLETE.value)
-            writer.write(encode_str(info.shm.name))
-
-            with suppress(asyncio.CancelledError):
-                await info.lease(reader, writer)
-        finally:
-            await close_stream_writer(writer)
-
-
-class SHMService(ServiceManager[SHMServer]):
-    ADDR_ENV = SHMSERVER_ADDR_ENV
-    PORT_DEFAULT = SHMSERVER_PORT_DEFAULT
-
-    def __init__(self, address: typing.Optional[AddressType] = None) -> None:
-        super().__init__(SHMServer, address)
-
-    async def create(
-        self, num_buffers: int, buf_size: int = DEFAULT_SHM_SIZE
-    ) -> SHMContext:
-        reader, writer = await self.open_connection()
-        writer.write(Command.SHM_CREATE.value)
-        writer.write(uint64_to_bytes(num_buffers))
-        writer.write(uint64_to_bytes(buf_size))
-        await writer.drain()
-
-        response = await reader.read(1)
-        if response != Command.COMPLETE.value:
-            raise ValueError("Error creating SHM segment")
-
-        shm_name = await read_str(reader)
-        return SHMContext._create(shm_name, reader, writer)
-
-    async def attach(self, name: str) -> SHMContext:
-        reader, writer = await self.open_connection()
-        writer.write(Command.SHM_ATTACH.value)
-        writer.write(encode_str(name))
-        await writer.drain()
-
-        response = await reader.read(1)
-        if response != Command.COMPLETE.value:
-            raise ValueError("Invalid SHM Name")
-
-        shm_name = await read_str(reader)
-        return SHMContext._create(shm_name, reader, writer)

@@ -17,7 +17,6 @@ from .stream import Stream
 from .unit import Unit, PROCESS_ATTR
 
 from .graphserver import GraphService
-from .shmserver import SHMService
 from .graphcontext import GraphContext
 from .backendprocess import (
     BackendProcess,
@@ -40,7 +39,6 @@ class ExecutionContext:
         self,
         processes: typing.List[typing.List[Unit]],
         graph_service: GraphService,
-        shm_service: SHMService,
         connections: typing.List[typing.Tuple[str, str]] = [],
         backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
     ) -> None:
@@ -60,7 +58,6 @@ class ExecutionContext:
                 self.start_barrier,
                 self.stop_barrier,
                 graph_service,
-                shm_service,
             )
             for process_units in processes
         ]
@@ -70,7 +67,6 @@ class ExecutionContext:
         cls,
         components: typing.Mapping[str, Component],
         graph_service: GraphService,
-        shm_service: SHMService,
         root_name: typing.Optional[str] = None,
         connections: typing.Optional[NetworkDefinition] = None,
         process_components: typing.Optional[typing.Collection[Component]] = None,
@@ -139,7 +135,6 @@ class ExecutionContext:
             return cls(
                 processes,
                 graph_service,
-                shm_service,
                 graph_connections,
                 backend_process,
             )
@@ -191,7 +186,6 @@ def run(
     # FIXME: This function is the last major re-implementation needed to make this
     # codebase more maintainable.
     graph_service = GraphService(graph_address)
-    shm_service = SHMService()
 
     if components is not None and isinstance(components, Component):
         components = {"SYSTEM": components}
@@ -206,7 +200,6 @@ def run(
         execution_context = ExecutionContext.setup(
             components,
             graph_service,
-            shm_service,
             root_name,
             connections,
             process_components,
@@ -219,7 +212,7 @@ def run(
 
         # FIXME: When done this way, we don't exit the graph_context on exception
         async def create_graph_context() -> GraphContext:
-            return await GraphContext(graph_service, shm_service).__aenter__()
+            return await GraphContext(graph_service).__aenter__()
 
         # FIXME: This sort of stuff should all be done in a separate async function...
         # Done this way, its ugly as hell and opens us up to a lot of issues with

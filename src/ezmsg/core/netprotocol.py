@@ -18,10 +18,7 @@ DEFAULT_HOST = "127.0.0.1"
 GRAPHSERVER_ADDR_ENV = "EZMSG_GRAPHSERVER_ADDR"
 GRAPHSERVER_PORT_DEFAULT = 25978
 
-SHMSERVER_ADDR_ENV = "EZMSG_SHMSERVER_ADDR"
-SHMSERVER_PORT_DEFAULT = 25979
-
-RESERVED_PORTS = [GRAPHSERVER_PORT_DEFAULT, SHMSERVER_PORT_DEFAULT]
+RESERVED_PORTS = [GRAPHSERVER_PORT_DEFAULT]
 
 SERVER_PORT_START_ENV = "EZMSG_SERVER_PORT_START"
 SERVER_PORT_START_DEFAULT = 10000
@@ -139,6 +136,8 @@ async def close_server(server: Server):
 
 
 class Command(enum.Enum):
+
+    @staticmethod
     def _generate_next_value_(name, start, count, last_values) -> bytes:
         return count.to_bytes(1, BYTEORDER, signed=False)
 
@@ -162,7 +161,7 @@ class Command(enum.Enum):
     TX_TCP = enum.auto()
     RX_ACK = enum.auto()
 
-    # SHMServer Commands
+    # SHM Commands
     SHM_CREATE = enum.auto()
     SHM_ATTACH = enum.auto()
 

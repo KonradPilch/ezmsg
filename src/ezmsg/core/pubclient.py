@@ -7,7 +7,7 @@ from uuid import UUID
 from contextlib import suppress
 
 from .backpressure import Backpressure
-from .shmserver import SHMContext, SHMService
+from .shm import SHMContext
 from .graphserver import GraphService
 from .messagecache import MessageCache, Cache
 from .messagemarshal import MessageMarshal, UndersizedMemory
@@ -55,7 +55,7 @@ class Publisher:
     _force_tcp: bool
     _last_backpressure_event: float
 
-    _shm_service: SHMService
+    _graph_service: GraphService
 
     @staticmethod
     def client_type() -> bytes:
@@ -66,7 +66,6 @@ class Publisher:
         cls,
         topic: str,
         graph_service: GraphService,
-        shm_service: SHMService,
         host: Optional[str] = None,
         port: Optional[int] = None,
         buf_size: int = DEFAULT_SHM_SIZE,
@@ -75,10 +74,10 @@ class Publisher:
         reader, writer = await graph_service.open_connection()
         writer.write(Command.PUBLISH.value)
         id = UUID(await read_str(reader))
-        pub = cls(id, topic, shm_service, **kwargs)
+        pub = cls(id, topic, graph_service, **kwargs)
         writer.write(uint64_to_bytes(pub.pid))
         writer.write(encode_str(pub.topic))
-        pub._shm = await shm_service.create(pub._num_buffers, buf_size)
+        pub._shm = await graph_service.create_shm(pub._num_buffers, buf_size)
 
         start_port = int(
             os.getenv(PUBLISHER_START_PORT_ENV, PUBLISHER_START_PORT_DEFAULT)
@@ -111,7 +110,7 @@ class Publisher:
         self,
         id: UUID,
         topic: str,
-        shm_service: SHMService,
+        graph_service: GraphService,
         num_buffers: int = 32,
         start_paused: bool = False,
         force_tcp: bool = False,
@@ -132,7 +131,7 @@ class Publisher:
         self._initialized = asyncio.Event()
         self._last_backpressure_event = -1
 
-        self._shm_service = shm_service
+        self._graph_service = graph_service
 
     def close(self) -> None:
         self._graph_task.cancel()
@@ -174,7 +173,7 @@ class Publisher:
                     writer.write(Command.COMPLETE.value)
 
                 else:
-                    logger.warn(
+                    logger.warning(
                         f"Publisher {self.id} rx unknown command from GraphServer {cmd}"
                     )
 
@@ -270,7 +269,7 @@ class Publisher:
                         MessageCache[self.id].push(self._msg_id, self._shm)
 
                     except UndersizedMemory as e:
-                        new_shm = await self._shm_service.create(
+                        new_shm = await self._graph_service.create_shm(
                             self._num_buffers, e.req_size * 2
                         )
 
