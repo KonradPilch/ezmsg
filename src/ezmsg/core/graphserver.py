@@ -61,19 +61,19 @@ class GraphServer(ThreadedAsyncServer):
 
     async def shutdown(self) -> None:
         logger.info('shutting down')
+        for task in self._client_tasks.values():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        self._client_tasks.clear()
+
         for info in self.shms.values():
             for lease_task in list(info.leases):
                 lease_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await lease_task
             info.leases.clear()
-    
         logger.info('leases released')
-        for task in self._client_tasks.values():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-        self._client_tasks.clear()
 
     async def api(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
