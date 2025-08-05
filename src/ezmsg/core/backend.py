@@ -1,13 +1,14 @@
 import asyncio
-import logging
-import typing
 import enum
+import logging
+import os
+import typing
 
-from socket import socket
 from multiprocessing import Event, Barrier
 from multiprocessing.synchronize import Event as EventType
 from multiprocessing.synchronize import Barrier as BarrierType
 from multiprocessing.connection import wait, Connection
+from socket import socket
 
 from .netprotocol import DEFAULT_SHM_SIZE, AddressType
 
@@ -165,6 +166,7 @@ def run(
     backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
     graph_address: typing.Optional[AddressType] = None,
     force_single_process: bool = False,
+    profiler_log_name: str | None = None,
     **components_kwargs: Component,
 ) -> None:
     """
@@ -188,6 +190,7 @@ def run(
             This is necessary when running ``ezmsg`` in a notebook.
         components_kwargs:
     """
+    os.environ["EZMSG_PROFILER"] = profiler_log_name or "ezprofiler.log"
     # FIXME: This function is the last major re-implementation needed to make this
     # codebase more maintainable.
     graph_service = GraphService(graph_address)
