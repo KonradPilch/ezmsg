@@ -75,8 +75,7 @@ class Publisher:
         writer.write(Command.PUBLISH.value)
         id = UUID(await read_str(reader))
         pub = cls(id, topic, graph_service, **kwargs)
-        writer.write(uint64_to_bytes(pub.pid))
-        writer.write(encode_str(pub.topic))
+        writer.write(uint64_to_bytes(pub.pid) + encode_str(pub.topic))
         pub._shm = await graph_service.create_shm(pub._num_buffers, buf_size)
 
         start_port = int(
