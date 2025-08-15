@@ -20,7 +20,6 @@ from .unit import Unit, TIMEIT_ATTR, SUBSCRIBES_ATTR, ZERO_COPY_ATTR
 
 from .graphcontext import GraphContext
 from .graphserver import GraphService
-from .shmserver import SHMService
 from .pubclient import Publisher
 from .subclient import Subscriber
 from .messagecache import MessageCache
@@ -65,7 +64,6 @@ class BackendProcess(Process):
     start_barrier: BarrierType
     stop_barrier: BarrierType
     graph_service: GraphService
-    shm_service: SHMService
 
     def __init__(
         self,
@@ -74,7 +72,6 @@ class BackendProcess(Process):
         start_barrier: BarrierType,
         stop_barrier: BarrierType,
         graph_service: GraphService,
-        shm_service: SHMService,
     ) -> None:
         super().__init__()
         self.units = units
@@ -82,7 +79,6 @@ class BackendProcess(Process):
         self.start_barrier = start_barrier
         self.stop_barrier = stop_barrier
         self.graph_service = graph_service
-        self.shm_service = shm_service
         self.task_finished_ev: Optional[threading.Event] = None
 
     def run(self) -> None:
@@ -103,7 +99,7 @@ class DefaultBackendProcess(BackendProcess):
 
     def process(self, loop: asyncio.AbstractEventLoop) -> None:
         main_func = None
-        context = GraphContext(self.graph_service, self.shm_service)
+        context = GraphContext(self.graph_service)
         coro_callables: Dict[str, Callable[[], Coroutine[Any, Any, None]]] = dict()
 
         try:

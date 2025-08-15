@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager, suppress
 from copy import deepcopy
 
 from .graphserver import GraphService
-from .shmserver import SHMContext, SHMService
+from .shm import SHMContext
 from .messagecache import MessageCache, Cache
 from .messagemarshal import MessageMarshal
 
@@ -41,23 +41,23 @@ class Subscriber:
     _shms: typing.Dict[UUID, SHMContext]
     _incoming: "asyncio.Queue[typing.Tuple[UUID, int]]"
 
-    _shm_service: SHMService
+    _graph_service: GraphService
 
     @classmethod
     async def create(
-        cls, topic: str, graph_service: GraphService, shm_service: SHMService, **kwargs
+        cls, topic: str, graph_service: GraphService, **kwargs
     ) -> "Subscriber":
         reader, writer = await graph_service.open_connection()
         writer.write(Command.SUBSCRIBE.value)
         id_str = await read_str(reader)
-        sub = cls(UUID(id_str), topic, shm_service, **kwargs)
+        sub = cls(UUID(id_str), topic, graph_service, **kwargs)
         writer.write(uint64_to_bytes(sub.pid))
         writer.write(encode_str(sub.topic))
         sub._graph_task = asyncio.create_task(sub._graph_connection(reader, writer))
         await sub._initialized.wait()
         return sub
 
-    def __init__(self, id: UUID, topic: str, shm_service: SHMService, **kwargs) -> None:
+    def __init__(self, id: UUID, topic: str, graph_service: GraphService, **kwargs) -> None:
         self.id = id
         self.pid = os.getpid()
         self.topic = topic
@@ -68,7 +68,7 @@ class Subscriber:
         self._incoming = asyncio.Queue()
         self._initialized = asyncio.Event()
 
-        self._shm_service = shm_service
+        self._graph_service = graph_service
 
     def close(self) -> None:
         self._graph_task.cancel()
@@ -177,7 +177,7 @@ class Subscriber:
                         if id in self._shms:
                             self._shms[id].close()
                         try:
-                            self._shms[id] = await self._shm_service.attach(shm_name)
+                            self._shms[id] = await self._graph_service.attach_shm(shm_name)
                         except ValueError:
                             logger.info(
                                 "Invalid SHM received from publisher; may be dead"
