@@ -38,16 +38,12 @@ class GraphContext:
         self._graph_server = None
 
     async def publisher(self, topic: str, **kwargs) -> Publisher:
-        pub = await Publisher.create(
-            topic, self._graph_service, **kwargs
-        )
+        pub = await Publisher.create(topic, self._graph_service, **kwargs)
         self._clients.add(pub)
         return pub
 
     async def subscriber(self, topic: str, **kwargs) -> Subscriber:
-        sub = await Subscriber.create(
-            topic, self._graph_service, **kwargs
-        )
+        sub = await Subscriber.create(topic, self._graph_service, **kwargs)
         self._clients.add(sub)
         return sub
 
