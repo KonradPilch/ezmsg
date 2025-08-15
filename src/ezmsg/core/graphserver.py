@@ -55,7 +55,6 @@ class GraphServer(ThreadedAsyncServer):
         self.node = getnode()
         self.shms = dict()
 
-
     async def setup(self) -> None:
         self._command_lock = asyncio.Lock()
 
@@ -94,7 +93,7 @@ class GraphServer(ThreadedAsyncServer):
                 self._shutdown.set()
                 await close_stream_writer(writer)
                 return
-            
+
             elif req in [Command.SHM_CREATE.value, Command.SHM_ATTACH.value]:
                 info: Optional[SHMInfo] = None
 
