@@ -105,7 +105,7 @@ class AttachEchoProcess(AttachTestProcess):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="canonical port isn't always available")
+# @pytest.mark.skip(reason="canonical port isn't always available")
 async def test_attach():
     graph_service = GraphService(address=GraphService.default_address())
     graph_server = graph_service.create_server()
