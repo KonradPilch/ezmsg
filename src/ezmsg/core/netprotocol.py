@@ -177,6 +177,7 @@ def create_socket(
     ignore_ports: typing.List[int] = RESERVED_PORTS,
 ) -> socket.socket:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     if host is None:
         host = DEFAULT_HOST
