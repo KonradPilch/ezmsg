@@ -34,7 +34,8 @@ test = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
-    "xarray>=2023.1.0;python_version<'3.13'"
+    "xarray>=2023.1.0;python_version<'3.13'",
+    "psutil>=7.1.0",
 ]
 docs = [
     "ezmsg-sigproc>=2.2.0",
@@ -44,6 +45,7 @@ docs = [
 
 [project.scripts]
 ezmsg = "ezmsg.core.command:cmdline"
+ezmsg-perf = "ezmsg.util.perf.command:command"
 
 [project.optional-dependencies]
 axisarray = [
