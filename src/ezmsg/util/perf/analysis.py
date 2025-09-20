@@ -6,7 +6,8 @@ import argparse
 from pathlib import Path
 
 from ..messagecodec import MessageDecoder
-from .envinfo import TestEnvironmentInfo
+from .envinfo import TestEnvironmentInfo, format_env_diff
+from .ai import chatgpt_analyze_results
 from .impl import (
     TestParameters, 
     Metrics,
@@ -74,22 +75,37 @@ def load_perf(perf: Path) -> xr.Dataset:
     return dataset
 
 
-def summary(perf_path: Path, baseline_path: Path | None) -> None:
+def summary(perf_path: Path, baseline_path: Path | None, ai: bool = False) -> None:
     """ print perf test results and comparisons to the console """
 
+    output = ''
+
     perf = load_perf(perf_path)
-    info = perf.attrs['info']
+    info: TestEnvironmentInfo = perf.attrs['info']
+    output += str(info) + '\n\n'
+
+
     if baseline_path is not None:
+        output += "PERFORMANCE COMPARISON\n\n"
         baseline = load_perf(baseline_path)
         perf = (perf / baseline) * 100.0
+        baseline_info: TestEnvironmentInfo = baseline.attrs['info']
+        output += format_env_diff(info.diff(baseline_info)) + '\n\n'
 
-    print(info)
+    # These raw stats are still valuable to have, but are confusing 
+    # when making relative comparisons
+    perf = perf.drop_vars(['latency_total', 'num_msgs'])
 
     for _, config_ds in perf.groupby('config'):
         for _, comms_ds in config_ds.groupby('comms'):
-            print(comms_ds.squeeze().to_dataframe())
-            print("\n")
-        print("\n")
+            output += str(comms_ds.squeeze().to_dataframe()) + '\n\n'
+        output += '\n'
+
+    print(output)
+
+    if ai:
+        print('Querying ChatGPT for AI-assisted analysis of performance test results')
+        print(chatgpt_analyze_results(output))
 
 
 def setup_summary_cmdline(subparsers: argparse._SubParsersAction) -> None:
@@ -106,8 +122,14 @@ def setup_summary_cmdline(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="baseline perf test for comparison",
     )
+    p_summary.add_argument(
+        "--ai",
+        action="store_true",
+        help="ask chatgpt for an analysis of the results.  requires OPENAI_API_KEY set in environment"
+    )
 
     p_summary.set_defaults(_handler=lambda ns: summary(
         perf_path = ns.perf,
-        baseline_path = ns.baseline
+        baseline_path = ns.baseline,
+        ai = ns.ai
     ))
