@@ -25,8 +25,8 @@ class PerfEvalArgs:
 
 def perf_eval(args: PerfEvalArgs) -> None:
     
-    msg_sizes = [2 ** exp for exp in range(4, 25, 4)]
-    n_clients = [2 ** exp for exp in range(0, 6)]
+    msg_sizes = [2 ** exp for exp in range(4, 25, 8)]
+    n_clients = [2 ** exp for exp in range(0, 6, 2)]
     comms = [c for c in Communication]
 
     test_list = list(itertools.product(msg_sizes, n_clients, CONFIGS, comms))
