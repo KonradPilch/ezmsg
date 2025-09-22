@@ -190,7 +190,13 @@ def relay(config: ConfigSettings) -> Configuration:
 
     return relays, connections
 
-CONFIGS: typing.Iterable[Configurator] = [fanin, fanout, relay]
+CONFIGS: typing.Mapping[str, Configurator] = {
+    c.__name__: c for c in [
+        fanin, 
+        fanout, 
+        relay
+    ]
+}
 
 class Communication(enum.StrEnum):
     LOCAL = "local"
