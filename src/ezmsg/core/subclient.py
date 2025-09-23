@@ -210,7 +210,7 @@ class Subscriber:
 
                 self._incoming.put_nowait((id, msg_id))
 
-        except (ConnectionResetError, BrokenPipeError):
+        except (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError):
             logger.debug(f"connection fail: sub:{self.id} -> pub:{id}")
 
         finally:
