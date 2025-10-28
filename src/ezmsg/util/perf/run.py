@@ -3,6 +3,7 @@ import datetime
 import itertools
 import argparse
 import typing
+import random
 
 from ..messagecodec import MessageEncoder
 from .envinfo import TestEnvironmentInfo
@@ -32,6 +33,7 @@ def perf_run(
     n_clients: typing.Iterable[int] | None,
     comms: typing.Iterable[str] | None,
     configs: typing.Iterable[str] | None,
+    grid: bool,
 ) -> None:
     
     if n_clients is None:
@@ -45,6 +47,13 @@ def perf_run(
     if any(s < 0 for s in msg_sizes):
         ez.logger.error('All msg_sizes must be >=0 bytes')
 
+    if not grid and len(list(n_clients)) != len(list(msg_sizes)):
+        ez.logger.warning(
+            "Not performing a grid test of all combinations of n_clients and msg_sizes, but " + \
+            "len(n_clients) != len(msg_sizes). " + \
+            "If you want to perform all combinations of n_clients and msg_sizes, use --grid"
+        )
+
     try:
         communications = DEFAULT_COMMS if comms is None else [Communication(c) for c in comms]
     except ValueError:
@@ -56,8 +65,16 @@ def perf_run(
     except ValueError:
         ez.logger.error(f"Invalid test configuration requested. Valid configurations: {', '.join([c for c in CONFIGS])}")
         return
+    
+    subitr = itertools.product if grid else zip
 
-    test_list = list(itertools.product(msg_sizes, n_clients, configurators, communications))
+    test_list = [
+        (clients, msg_size, config, comms)
+        for clients, msg_size in subitr(n_clients, msg_sizes)
+        for config, comms in itertools.product(configurators, communications)
+    ]
+
+    random.shuffle(test_list)
 
     with open(f'perf_{get_datestamp()}.txt', 'w') as out_f:
 
@@ -151,6 +168,13 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
         help = f"configurations to test (default = {[c for c in CONFIGS]})"
     )
 
+    p_run.add_argument(
+        "--grid",
+        action = "store_true",
+        help = "perform all combinations of msg_sizes and n_clients " + \
+            "(default: False; msg_sizes and n_clients must match in length)"
+    )
+
 
     p_run.set_defaults(_handler=lambda ns: perf_run(
         duration = ns.duration, 
@@ -160,4 +184,5 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
         n_clients = ns.n_clients,
         comms = ns.comms,
         configs = ns.configs,
+        grid = ns.grid
     ))
