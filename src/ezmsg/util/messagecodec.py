@@ -9,7 +9,6 @@ This module provides JSON serialization support for complex objects including:
 The MessageEncoder and MessageDecoder classes handle automatic conversion
 between Python objects and JSON representations suitable for file logging.
 """
-from collections.abc import Iterable, Generator
 import json
 import pickle
 import base64
@@ -118,10 +117,10 @@ class StampedMessage(typing.NamedTuple):
     :param msg: The message object
     :type msg: typing.Any
     :param timestamp: Optional timestamp for the message
-    :type timestamp: float | None
+    :type timestamp: typing.Optional[float]
     """
     msg: typing.Any
-    timestamp: float | None
+    timestamp: typing.Optional[float]
 
 
 def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
@@ -136,17 +135,17 @@ def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
     :return: Reconstructed object
     :rtype: typing.Any
     """
-    obj_type: str | None = obj.get(TYPE)
+    obj_type: typing.Optional[str] = obj.get(TYPE)
 
     out_obj: typing.Any = obj
 
     if obj_type is not None:
         if np and obj_type == NDARRAY_TYPE:
-            data_bytes: str | None = obj.get(NDARRAY_DATA)
-            data_shape: Iterable[int] | None = obj.get(
+            data_bytes: typing.Optional[str] = obj.get(NDARRAY_DATA)
+            data_shape: typing.Optional[typing.Iterable[int]] = obj.get(
                 NDARRAY_SHAPE
             )
-            data_dtype: npt.DTypeLike | None = obj.get(NDARRAY_DTYPE)
+            data_dtype: typing.Optional[npt.DTypeLike] = obj.get(NDARRAY_DTYPE)
 
             if (
                 isinstance(data_bytes, str)
@@ -157,7 +156,7 @@ def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
                 out_obj = np.frombuffer(buf, dtype=data_dtype).reshape(data_shape)
 
         elif obj_type == PICKLE_TYPE:
-            data_bytes: str | None = obj.get(PICKLE_DATA)
+            data_bytes: typing.Optional[str] = obj.get(PICKLE_DATA)
             if isinstance(data_bytes, str):
                 buf = base64.b64decode(data_bytes.encode("ascii"))
                 out_obj = pickle.loads(buf)
@@ -185,7 +184,7 @@ class MessageDecoder(json.JSONDecoder):
 
 def message_log(
     fname: Path, return_object: bool = True
-) -> Generator[typing.Any, None, None]:
+) -> typing.Generator[typing.Any, None, None]:
     """
     Generator function to read messages from a log file created by MessageLogger.
     
@@ -194,7 +193,7 @@ def message_log(
     :param return_object: If True, yield only the message objects; if False, yield complete log entries
     :type return_object: bool
     :return: Generator yielding messages or log entries
-    :rtype: collections.abc.Generator[typing.Any, None, None]
+    :rtype: typing.Generator[typing.Any, None, None]
     """
     with open(fname, "r") as f:
         for line in f:

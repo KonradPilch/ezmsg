@@ -73,9 +73,9 @@ def cmdline() -> None:
 
     class Args:
         command: str
-        address: str | None
+        address: typing.Optional[str]
         target: str
-        compact: int | None
+        compact: typing.Optional[int]
         nobrowser: bool
 
     args = parser.parse_args(namespace=Args)
@@ -102,7 +102,7 @@ async def run_command(
     cmd: str,
     graph_address: Address,
     target: str = "live",
-    compact: int | None = None,
+    compact: typing.Optional[int] = None,
     nobrowser: bool = False,
 ) -> None:
     """
@@ -118,7 +118,7 @@ async def run_command(
     :param target: Target for visualization commands (default: 'live')
     :type target: str
     :param compact: Compactification level for visualization commands
-    :type compact: int | None
+    :type compact: typing.Optional[int]
     :param nobrowser: Whether to suppress browser opening for visualization
     :type nobrowser: bool
     """

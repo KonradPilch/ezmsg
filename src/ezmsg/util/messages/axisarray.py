@@ -1,5 +1,4 @@
 from abc import abstractmethod, ABC
-from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from dataclasses import field, dataclass
 from array_api_compat import get_namespace, is_cupy_array, is_numpy_array
@@ -82,10 +81,10 @@ class LinearAxis(AxisBase):
         return (x * self.gain) + self.offset
 
     @typing.overload
-    def index(self, v: float, fn: Callable = np.rint) -> int: ...
+    def index(self, v: float, fn: typing.Callable = np.rint) -> int: ...
     @typing.overload
     def index(
-        self, v: npt.NDArray[np.float64], fn: Callable = np.rint
+        self, v: npt.NDArray[np.float64], fn: typing.Callable = np.rint
     ) -> npt.NDArray[np.int_]: ...
     def index(self, v, fn=np.rint):
         """
@@ -94,7 +93,7 @@ class LinearAxis(AxisBase):
         :param v: Axis value or array of values to convert to indices
         :type v: float | npt.NDArray[np.float64]
         :param fn: Function to apply for rounding (default: np.rint)
-        :type fn: collections.abc.Callable
+        :type fn: typing.Callable
         :return: Corresponding index or array of indices
         :rtype: int | npt.NDArray[np.int_]
         """
@@ -131,7 +130,7 @@ class ArrayWithNamedDims:
     :raises ValueError: If dims length doesn't match data.ndim or contains duplicate names
     """
     data: npt.NDArray
-    dims: list[str]
+    dims: typing.List[str]
 
     def __post_init__(self):
         if len(self.dims) != self.data.ndim:
@@ -204,8 +203,8 @@ class AxisArray(ArrayWithNamedDims):
     :param key: Optional key identifier for this array, typically used to specify source device (default is empty string)
     :type key: str
     """
-    axes: dict[str, AxisBase] = field(default_factory=dict)
-    attrs: dict[str, typing.Any] = field(default_factory=dict)
+    axes: typing.Dict[str, AxisBase] = field(default_factory=dict)
+    attrs: typing.Dict[str, typing.Any] = field(default_factory=dict)
     key: str = ""
 
     T = typing.TypeVar("T", bound="AxisArray")
@@ -273,7 +272,7 @@ class AxisArray(ArrayWithNamedDims):
         axis: AxisBase
         idx: int
         # TODO (kpilch): rename this to _size as preferred usage is len(obj), not obj.size
-        size: int | None = None
+        size: typing.Optional[int] = None
 
         def __post_init__(self) -> None:
             if not isinstance(self.axis, CoordinateAxis) and self.size is None:
@@ -312,7 +311,7 @@ class AxisArray(ArrayWithNamedDims):
 
     def isel(
         self: T,
-        indexers: typing.Any | None = None,
+        indexers: typing.Optional[typing.Any] = None,
         **indexers_kwargs: typing.Any,
     ) -> T:
         """
@@ -357,7 +356,7 @@ class AxisArray(ArrayWithNamedDims):
 
     def sel(
         self: T,
-        indexers: typing.Any | None = None,
+        indexers: typing.Optional[typing.Any] = None,
         **indexers_kwargs: typing.Any,
     ) -> T:
         """
@@ -391,7 +390,7 @@ class AxisArray(ArrayWithNamedDims):
         return self.isel(**out_indexers)
 
     @property
-    def shape(self) -> tuple[int, ...]:
+    def shape(self) -> typing.Tuple[int, ...]:
         """
         Shape of data.
         
@@ -421,7 +420,7 @@ class AxisArray(ArrayWithNamedDims):
 
         return DataArray(self.data, coords=coords, dims=self.dims, attrs=self.attrs)
 
-    def ax(self, dim: str | int) -> AxisInfo:
+    def ax(self, dim: typing.Union[str, int]) -> AxisInfo:
         """
         Get AxisInfo for a specified dimension.
         
@@ -436,7 +435,7 @@ class AxisArray(ArrayWithNamedDims):
             axis=self.get_axis(axis_name), idx=axis_idx, size=self.shape[axis_idx]
         )
 
-    def get_axis(self, dim: str | int) -> AxisBase:
+    def get_axis(self, dim: typing.Union[str, int]) -> AxisBase:
         """
         Get the axis coordinate system for a specified dimension.
         
@@ -478,7 +477,7 @@ class AxisArray(ArrayWithNamedDims):
         except ValueError:
             raise ValueError(f"{dim=} not present in object")
 
-    def axis_idx(self, dim: str | int) -> int:
+    def axis_idx(self, dim: typing.Union[str, int]) -> int:
         """
         Get the axis index for a given dimension name or pass through if already an int.
         
@@ -489,11 +488,11 @@ class AxisArray(ArrayWithNamedDims):
         """
         return self.get_axis_idx(dim) if isinstance(dim, str) else dim
 
-    def _axis_idx(self, dim: str | int) -> int:
+    def _axis_idx(self, dim: typing.Union[str, int]) -> int:
         """Deprecated; use axis_idx instead"""
         return self.axis_idx(dim)
 
-    def as2d(self, dim: str | int) -> npt.NDArray:
+    def as2d(self, dim: typing.Union[str, int]) -> npt.NDArray:
         """
         Get a 2D view of the data with the specified dimension as the first axis.
         
@@ -505,8 +504,8 @@ class AxisArray(ArrayWithNamedDims):
         return as2d(self.data, self.axis_idx(dim), xp=get_namespace(self.data))
 
     def iter_over_axis(
-        self: T, axis: str | int
-    ) -> Generator[T, None, None]:
+        self: T, axis: typing.Union[str, int]
+    ) -> typing.Generator[T, None, None]:
         """
         Iterate over slices along the specified axis.
         
@@ -516,7 +515,7 @@ class AxisArray(ArrayWithNamedDims):
         :param axis: Dimension name or index to iterate over
         :type axis: str | int
         :yields: AxisArray objects for each slice along the axis
-        :rtype: collections.abc.Generator[T, None, None]
+        :rtype: typing.Generator[T, None, None]
         """
         xp = get_namespace(self.data)
         axis_idx = self.axis_idx(axis)
@@ -535,8 +534,8 @@ class AxisArray(ArrayWithNamedDims):
 
     @contextmanager
     def view2d(
-        self, dim: str | int
-    ) -> Generator[npt.NDArray, None, None]:
+        self, dim: typing.Union[str, int]
+    ) -> typing.Generator[npt.NDArray, None, None]:
         """
         Context manager providing a 2D view of the data.
         
@@ -546,12 +545,12 @@ class AxisArray(ArrayWithNamedDims):
         :param dim: Dimension name or index to move to first axis  
         :type dim: str | int
         :yields: 2D array view with shape (dim_size, remaining_elements)
-        :rtype: collections.abc.Generator[npt.NDArray, None, None]
+        :rtype: typing.Generator[npt.NDArray, None, None]
         """
         with view2d(self.data, self.axis_idx(dim)) as arr:
             yield arr
 
-    def shape2d(self, dim: str | int) -> tuple[int, int]:
+    def shape2d(self, dim: typing.Union[str, int]) -> typing.Tuple[int, int]:
         """
         Get the 2D shape when viewing data with specified dimension first.
         
@@ -566,8 +565,8 @@ class AxisArray(ArrayWithNamedDims):
     def concatenate(
         *aas: T,
         dim: str,
-        axis: AxisBase | None = None,
-        filter_key: str | None = None,
+        axis: typing.Optional[AxisBase] = None,
+        filter_key: typing.Optional[str] = None,
     ) -> T:
         """
         Concatenate multiple AxisArray objects along a specified dimension.
@@ -627,7 +626,9 @@ class AxisArray(ArrayWithNamedDims):
     @staticmethod
     def transpose(
         aa: T,
-        dims: Iterable[str] | Iterable[int] | None = None,
+        dims: typing.Optional[
+            typing.Union[typing.Iterable[str], typing.Iterable[int]]
+        ] = None,
     ) -> T:
         """
         Transpose (reorder) the dimensions of an AxisArray.
@@ -635,7 +636,7 @@ class AxisArray(ArrayWithNamedDims):
         :param aa: The AxisArray to transpose
         :type aa: T
         :param dims: New dimension order (names or indices). If None, reverses all dimensions
-        :type dims: collections.abc.Iterable[str] | collections.abc.Iterable[int] | None
+        :type dims: typing.Iterable[str] | typing.Iterable[int] | None
         :return: New AxisArray with transposed dimensions
         :rtype: T
         """
@@ -648,7 +649,7 @@ class AxisArray(ArrayWithNamedDims):
 
 
 def slice_along_axis(
-    in_arr: npt.NDArray, sl: slice | int, axis: int
+    in_arr: npt.NDArray, sl: typing.Union[slice, int], axis: int
 ) -> npt.NDArray:
     """
     Slice the input array along a specified axis using the given slice object or integer index.
@@ -748,7 +749,7 @@ def sliding_win_oneaxis(
 
 def _as2d(
     in_arr: npt.NDArray, axis: int = 0, *, xp
-) -> tuple[npt.NDArray, tuple[int, ...]]:
+) -> typing.Tuple[npt.NDArray, typing.Tuple[int, ...]]:
     """
     Internal helper function to reshape array to 2D with specified axis first.
     
@@ -791,7 +792,7 @@ def as2d(in_arr: npt.NDArray, axis: int = 0, *, xp) -> npt.NDArray:
 @contextmanager
 def view2d(
     in_arr: npt.NDArray, axis: int = 0
-) -> Generator[npt.NDArray, None, None]:
+) -> typing.Generator[npt.NDArray, None, None]:
     """
     Context manager providing 2D view of the array, no matter what input dimensionality is.
     Yields a view of underlying data when possible, changes to data in yielded
@@ -807,7 +808,7 @@ def view2d(
     :param axis: Dimension index to move to first axis (Default = 0)
     :type axis: int
     :yields: 2D array view with shape (dim_size, remaining_elements)
-    :rtype: collections.abc.Generator[npt.NDArray, None, None]
+    :rtype: typing.Generator[npt.NDArray, None, None]
     """
     xp = get_namespace(in_arr)
     arr, remaining_shape = _as2d(in_arr, axis=axis, xp=xp)
@@ -820,7 +821,7 @@ def view2d(
         in_arr[:] = arr
 
 
-def shape2d(arr: npt.NDArray, axis: int = 0) -> tuple[int, int]:
+def shape2d(arr: npt.NDArray, axis: int = 0) -> typing.Tuple[int, int]:
     """
     Calculate the 2D shape when viewing array with specified axis first.
     

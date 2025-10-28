@@ -7,7 +7,6 @@ import traceback
 import threading
 
 from collections import defaultdict
-from collections.abc import Callable, Coroutine, Generator, Sequence
 from functools import wraps, partial
 from copy import deepcopy
 from multiprocessing import Process
@@ -15,7 +14,6 @@ from multiprocessing.synchronize import Event as EventType
 from multiprocessing.synchronize import Barrier as BarrierType
 from contextlib import suppress, contextmanager
 from concurrent.futures import TimeoutError
-from typing import Any
 
 from .stream import Stream, InputStream, OutputStream
 from .unit import Unit, TIMEIT_ATTR, SUBSCRIBES_ATTR, ZERO_COPY_ATTR
@@ -26,6 +24,19 @@ from .pubclient import Publisher
 from .subclient import Subscriber
 from .messagecache import MessageCache
 from abc import abstractmethod
+
+from typing import (
+    List,
+    Dict,
+    Callable,
+    Any,
+    Optional,
+    Sequence,
+    Set,
+    Coroutine,
+    DefaultDict,
+    Generator,
+)
 
 logger = logging.getLogger("ezmsg")
 
@@ -68,7 +79,7 @@ class BackendProcess(Process):
     handling initialization, coordination with other processes via barriers,
     and cleanup operations.
     """
-    units: list[Unit]
+    units: List[Unit]
     term_ev: EventType
     start_barrier: BarrierType
     stop_barrier: BarrierType
@@ -76,7 +87,7 @@ class BackendProcess(Process):
 
     def __init__(
         self,
-        units: list[Unit],
+        units: List[Unit],
         term_ev: EventType,
         start_barrier: BarrierType,
         stop_barrier: BarrierType,
@@ -86,7 +97,7 @@ class BackendProcess(Process):
         Initialize the backend process.
         
         :param units: List of Units to execute in this process.
-        :type units: list[Unit]
+        :type units: List[Unit]
         :param term_ev: Event for coordinated termination.
         :type term_ev: EventType
         :param start_barrier: Barrier for synchronized startup.
@@ -104,7 +115,7 @@ class BackendProcess(Process):
         self.start_barrier = start_barrier
         self.stop_barrier = stop_barrier
         self.graph_service = graph_service
-        self.task_finished_ev: threading.Event | None = None
+        self.task_finished_ev: Optional[threading.Event] = None
 
     def run(self) -> None:
         """
@@ -143,12 +154,12 @@ class DefaultBackendProcess(BackendProcess):
     handling publishers, subscribers, and the complete Unit lifecycle
     including initialization, execution, and shutdown.
     """
-    pubs: dict[str, Publisher]
+    pubs: Dict[str, Publisher]
 
     def process(self, loop: asyncio.AbstractEventLoop) -> None:
         main_func = None
         context = GraphContext(self.graph_service)
-        coro_callables: dict[str, Callable[[], Coroutine[Any, Any, None]]] = dict()
+        coro_callables: Dict[str, Callable[[], Coroutine[Any, Any, None]]] = dict()
 
         try:
             self.pubs = dict()
@@ -183,8 +194,8 @@ class DefaultBackendProcess(BackendProcess):
                 main_func = None
 
             for unit in self.units:
-                sub_callables: defaultdict[
-                    str, set[Callable[..., Coroutine[Any, Any, None]]]
+                sub_callables: DefaultDict[
+                    str, Set[Callable[..., Coroutine[Any, Any, None]]]
                 ] = defaultdict(set)
                 for task in unit.tasks.values():
                     task_callable = self.task_wrapper(unit, task)
@@ -393,7 +404,7 @@ class DefaultBackendProcess(BackendProcess):
 
 
 async def handle_subscriber(
-    sub: Subscriber, callables: set[Callable[..., Coroutine[Any, Any, None]]]
+    sub: Subscriber, callables: Set[Callable[..., Coroutine[Any, Any, None]]]
 ):
     """
     Handle incoming messages from a subscriber and distribute to callables.
@@ -405,7 +416,7 @@ async def handle_subscriber(
     :param sub: Subscriber to receive messages from.
     :type sub: Subscriber
     :param callables: Set of async callables to invoke with messages.
-    :type callables: set[Callable[..., Coroutine[Any, Any, None]]]
+    :type callables: Set[Callable[..., Coroutine[Any, Any, None]]]
     """
     while True:
         if not callables:
@@ -445,7 +456,7 @@ def run_loop(loop: asyncio.AbstractEventLoop):
 
 @contextmanager
 def new_threaded_event_loop(
-    ev: threading.Event | None = None,
+    ev: Optional[threading.Event] = None,
 ) -> Generator[asyncio.AbstractEventLoop, None, None]:
     """
     Create a new asyncio event loop running in a separate thread.
@@ -454,7 +465,7 @@ def new_threaded_event_loop(
     thread, allowing async operations to be run from synchronous code.
     
     :param ev: Optional event to signal when the loop is ready.
-    :type ev: threading.Event | None
+    :type ev: Optional[threading.Event]
     :return: Context manager yielding the event loop.
     :rtype: Generator[asyncio.AbstractEventLoop, None, None]
     """

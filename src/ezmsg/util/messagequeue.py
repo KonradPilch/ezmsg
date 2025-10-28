@@ -1,6 +1,5 @@
 import asyncio
-from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, AsyncGenerator, Optional
 import ezmsg.core as ez
 from ezmsg.util.rate import Rate
 
@@ -16,8 +15,8 @@ class MessageQueueSettings(ez.Settings):
 
     maxsize: int = 0
     leaky: bool = False
-    log_above_n: int | None = None
-    output_hz: float | None = None
+    log_above_n: Optional[int] = None
+    output_hz: Optional[float] = None
 
 
 class MessageQueueState(ez.State):

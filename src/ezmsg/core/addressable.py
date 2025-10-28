@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 SEPARATOR = "/"
 
 
@@ -8,8 +10,8 @@ class Addressable:
     Addressable objects have a hierarchical address structure consisting of 
     a location path and a name, similar to a filesystem path.
     """
-    _name: str | None
-    _location: list[str] | None
+    _name: Optional[str]
+    _location: Optional[List[str]]
 
     def __init__(self) -> None:
         """
@@ -22,13 +24,13 @@ class Addressable:
         self._name = None
         self._location = None
 
-    def _set_name(self, name: str | None = None) -> None:
+    def _set_name(self, name: Optional[str] = None) -> None:
         if name is None:
             name = self.__class__.__name__
         assert self._name is None
         self._name = name
 
-    def _set_location(self, location: list[str] | None = None):
+    def _set_location(self, location: Optional[List[str]] = None):
         if location is None:
             location = []
         assert self._location is None
@@ -48,12 +50,12 @@ class Addressable:
         return self._name
 
     @property
-    def location(self) -> list[str]:
+    def location(self) -> List[str]:
         """
         Get the location path of this addressable object.
         
         :return: List of path components representing the object's location
-        :rtype: list[str]
+        :rtype: List[str]
         :raises AssertionError: If location has not been set
         """
         if self._location is None:

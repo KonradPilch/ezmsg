@@ -3,8 +3,7 @@ from contextlib import contextmanager
 
 from .netprotocol import uint64_to_bytes, bytes_to_uint, UINT64_SIZE
 
-from collections.abc import Generator
-from typing import Any
+from typing import Any, List, Tuple, Generator, Optional
 
 _PREAMBLE = b"EZ"
 _PREAMBLE_LEN = len(_PREAMBLE)
@@ -84,14 +83,14 @@ class Marshal:
             raise UninitializedMemory
 
     @classmethod
-    def msg_id(cls, mem: memoryview) -> int | None:
+    def msg_id(cls, mem: memoryview) -> Optional[int]:
         """
         Get msg_id currently written in mem; if uninitialized, return None.
         
         :param mem: Memory buffer to read from.
         :type mem: memoryview
         :return: Message ID if memory is initialized, None otherwise.
-        :rtype: int | None
+        :rtype: Optional[int]
         """
         try:
             cls._assert_initialized(mem)
@@ -124,7 +123,7 @@ class Marshal:
             buf_sizes[i] = bytes_to_uint(mem[sidx : sidx + UINT64_SIZE])
             sidx += UINT64_SIZE
 
-        buffers: list[memoryview] = list()
+        buffers: List[memoryview] = list()
         for bsz in buf_sizes:
             buffers.append(mem[sidx : sidx + bsz])
             sidx += bsz
@@ -142,7 +141,7 @@ class Marshal:
     @contextmanager
     def serialize(
         cls, msg_id: int, obj: Any
-    ) -> Generator[tuple[int, bytes, list[memoryview]], None, None]:
+    ) -> Generator[Tuple[int, bytes, List[memoryview]], None, None]:
         """
         Serialize an object for network transmission.
         
@@ -154,7 +153,7 @@ class Marshal:
         :param obj: Object to serialize.
         :type obj: Any
         :return: Context manager yielding (total_size, header, buffers) tuple.
-        :rtype: Generator[tuple[int, bytes, list[memoryview]], None, None]
+        :rtype: Generator[Tuple[int, bytes, List[memoryview]], None, None]
         """
         buffers = cls.dump(obj)
         header = uint64_to_bytes(len(buffers))
@@ -171,27 +170,27 @@ class Marshal:
                 buffer.release()
 
     @staticmethod
-    def dump(obj: Any) -> list[memoryview]:
+    def dump(obj: Any) -> List[memoryview]:
         """
         Serialize an object to a list of memory buffers using pickle.
         
         :param obj: Object to serialize.
         :type obj: Any
         :return: List of memory views containing serialized data.
-        :rtype: list[memoryview]
+        :rtype: List[memoryview]
         """
-        obj_buffers: list[pickle.PickleBuffer] = list()
+        obj_buffers: List[pickle.PickleBuffer] = list()
         ser_obj = pickle.dumps(obj, protocol=5, buffer_callback=obj_buffers.append)
         buffers = [memoryview(ser_obj)] + [b.raw() for b in obj_buffers]
         return buffers
 
     @staticmethod
-    def load(buffers: list[memoryview]) -> Any:
+    def load(buffers: List[memoryview]) -> Any:
         """
         Deserialize an object from a list of memory buffers using pickle.
         
         :param buffers: List of memory views containing serialized data.
-        :type buffers: list[memoryview]
+        :type buffers: List[memoryview]
         :return: Deserialized object.
         :rtype: Any
         """

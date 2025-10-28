@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 
 import ezmsg.core as ez
 
-from collections.abc import AsyncGenerator
+from typing import AsyncGenerator
 
 
 # MESSAGE DEFINITIONS
