@@ -2,7 +2,6 @@ import asyncio
 import logging
 import pickle
 from contextlib import suppress
-from typing import Dict, List, Optional, Tuple
 from uuid import UUID, getnode, uuid1
 
 from . import __version__
@@ -33,17 +32,25 @@ logger = logging.getLogger("ezmsg")
 
 class GraphServer(ThreadedAsyncServer):
     """
-    Pub-Sub Directed Acyclic Graph
-    Running as a process: start() and stop()
-    Running as a thread: start_server(), stop_server(), join_server()
+    Pub-sub directed acyclic graph (DAG) server.
+    
+    The GraphServer manages the message routing graph for ezmsg applications,
+    handling publisher-subscriber relationships and maintaining the DAG structure.
+
+    Can be run either as a process (``start()`` and ``stop()``) or as a thread
+    (``start_server()``, ``stop_server()``, ``join_server()``).
+
+    .. note::
+       The GraphServer is typically managed automatically by the ezmsg runtime
+       and doesn't need to be instantiated directly by user code.
     """
 
     graph: DAG
-    clients: Dict[UUID, ClientInfo]
+    clients: dict[UUID, ClientInfo]
     node: int
-    shms: Dict[str, SHMInfo]
+    shms: dict[str, SHMInfo]
 
-    _client_tasks: Dict[UUID, "asyncio.Task[None]"]
+    _client_tasks: dict[UUID, "asyncio.Task[None]"]
     _command_lock: asyncio.Lock
 
     def __init__(self) -> None:
@@ -236,7 +243,7 @@ class GraphServer(ThreadedAsyncServer):
             await close_stream_writer(writer)
 
     async def _notify_subscriber(
-        self, sub: SubscriberInfo, iface: Optional[str] = None
+        self, sub: SubscriberInfo, iface: str | None = None
     ) -> None:
         try:
             notification = []
@@ -258,22 +265,22 @@ class GraphServer(ThreadedAsyncServer):
         except (ConnectionResetError, BrokenPipeError) as e:
             logger.debug(f"Failed to update Subscriber {sub.id}: {e}")
 
-    def _publishers(self) -> List[PublisherInfo]:
+    def _publishers(self) -> list[PublisherInfo]:
         return [
             info for info in self.clients.values() if isinstance(info, PublisherInfo)
         ]
 
-    def _subscribers(self) -> List[SubscriberInfo]:
+    def _subscribers(self) -> list[SubscriberInfo]:
         return [
             info for info in self.clients.values() if isinstance(info, SubscriberInfo)
         ]
 
-    def _upstream_pubs(self, topic: str) -> List[PublisherInfo]:
+    def _upstream_pubs(self, topic: str) -> list[PublisherInfo]:
         """Given a topic, return a set of all publisher IDs upstream of that topic"""
         upstream_topics = self.graph.upstream(topic)
         return [pub for pub in self._publishers() if pub.topic in upstream_topics]
 
-    def _downstream_subs(self, topic: str) -> List[SubscriberInfo]:
+    def _downstream_subs(self, topic: str) -> list[SubscriberInfo]:
         """Given a topic, return a set of all subscriber IDs upstream of that topic"""
         downstream_topics = self.graph.downstream(topic)
         return [sub for sub in self._subscribers() if sub.topic in downstream_topics]
@@ -283,12 +290,12 @@ class GraphService(ServiceManager[GraphServer]):
     ADDR_ENV = GRAPHSERVER_ADDR_ENV
     PORT_DEFAULT = GRAPHSERVER_PORT_DEFAULT
 
-    def __init__(self, address: Optional[AddressType] = None) -> None:
+    def __init__(self, address: AddressType | None = None) -> None:
         super().__init__(GraphServer, address)
 
     async def open_connection(
         self,
-    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await super().open_connection()
         writer.write(uint64_to_bytes(getnode()))
         await writer.drain()
@@ -319,7 +326,7 @@ class GraphService(ServiceManager[GraphServer]):
         await reader.read(1)  # Complete
         await close_stream_writer(writer)
 
-    async def sync(self, timeout: Optional[float] = None) -> None:
+    async def sync(self, timeout: float | None = None) -> None:
         reader, writer = await self.open_connection()
         writer.write(Command.SYNC.value)
         await writer.drain()
@@ -342,7 +349,7 @@ class GraphService(ServiceManager[GraphServer]):
         await writer.drain()
         await close_stream_writer(writer)
 
-    async def dag(self, timeout: Optional[float] = None) -> DAG:
+    async def dag(self, timeout: float | None = None) -> DAG:
         reader, writer = await self.open_connection()
         writer.write(Command.DAG.value)
         await writer.drain()
@@ -360,7 +367,7 @@ class GraphService(ServiceManager[GraphServer]):
         self,
         fmt: str,
         direction: str = "LR",
-        compact_level: Optional[int] = None,
+        compact_level: int | None = None,
     ) -> str:
         if fmt not in ["mermaid", "graphviz"]:
             raise ValueError(
