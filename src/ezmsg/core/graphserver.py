@@ -33,17 +33,9 @@ logger = logging.getLogger("ezmsg")
 
 class GraphServer(ThreadedAsyncServer):
     """
-    Pub-sub directed acyclic graph (DAG) server.
-    
-    The GraphServer manages the message routing graph for ezmsg applications,
-    handling publisher-subscriber relationships and maintaining the DAG structure.
-
-    Can be run either as a process (``start()`` and ``stop()``) or as a thread
-    (``start_server()``, ``stop_server()``, ``join_server()``).
-
-    .. note::
-       The GraphServer is typically managed automatically by the ezmsg runtime
-       and doesn't need to be instantiated directly by user code.
+    Pub-Sub Directed Acyclic Graph
+    Running as a process: start() and stop()
+    Running as a thread: start_server(), stop_server(), join_server()
     """
 
     graph: DAG
