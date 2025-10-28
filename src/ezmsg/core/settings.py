@@ -25,22 +25,22 @@ class SettingsMeta(ABCMeta):
     def __new__(
         cls,
         name: str,
-        bases: tuple[type, ...],
-        classdict: dict[str, typing.Any],
+        bases: typing.Tuple[type, ...],
+        classdict: typing.Dict[str, typing.Any],
         **kwargs: typing.Any,
-    ) -> type["Settings"]:
+    ) -> typing.Type["Settings"]:
         """
         Create a new Settings class with dataclass transformation.
         
         :param name: Name of the class being created.
         :type name: str
         :param bases: Base classes for the new class.
-        :type bases: tuple[type, ...]
+        :type bases: typing.Tuple[type, ...]
         :param classdict: Class namespace dictionary.
-        :type classdict: dict[str, typing.Any]
+        :type classdict: typing.Dict[str, typing.Any]
         :param kwargs: Additional keyword arguments.
         :return: New Settings class with dataclass applied.
-        :rtype: type[Settings]
+        :rtype: typing.Type[Settings]
         """
         new_cls = super().__new__(cls, name, bases, classdict)
         return dataclass(frozen=True)(new_cls)  # type: ignore

@@ -2,7 +2,7 @@ import asyncio
 
 from uuid import UUID
 
-from typing import Literal
+from typing import Set, Literal, List, Optional
 
 
 class BufferLease:
@@ -12,7 +12,7 @@ class BufferLease:
     A BufferLease tracks which clients have active leases on a buffer and
     provides synchronization when the buffer becomes empty.
     """
-    leases: set[UUID]
+    leases: Set[UUID]
     empty: asyncio.Event
 
     def __init__(self) -> None:
@@ -77,7 +77,7 @@ class Backpressure:
     :param num_buffers: Number of buffers to manage
     :type num_buffers: int
     """
-    buffers: list[BufferLease]
+    buffers: List[BufferLease]
     empty: asyncio.Event
     pressure: int
 
@@ -153,7 +153,7 @@ class Backpressure:
         except KeyError:
             pass
 
-    def free(self, uuid: UUID, buf_idx: int | None = None) -> None:
+    def free(self, uuid: UUID, buf_idx: Optional[int] = None) -> None:
         """
         Free leases for the given client.
         
@@ -163,7 +163,7 @@ class Backpressure:
         :param uuid: Unique identifier for the client
         :type uuid: UUID
         :param buf_idx: Optional buffer index to free, or None to free all
-        :type buf_idx: int | None
+        :type buf_idx: Optional[int]
         """
         if buf_idx is None:
             for idx in range(len(self.buffers)):

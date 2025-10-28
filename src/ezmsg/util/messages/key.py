@@ -1,4 +1,3 @@
-from collections.abc import AsyncGenerator, Generator
 import traceback
 import typing
 
@@ -10,14 +9,14 @@ from ..generator import consumer, GenState
 
 
 @consumer
-def set_key(key: str = "") -> Generator[AxisArray, AxisArray, None]:
+def set_key(key: str = "") -> typing.Generator[AxisArray, AxisArray, None]:
     """
     Set the key of an AxisArray.
 
     :param key: The string to set as the key.
     :type key: str
     :return: A primed generator object ready to yield an AxisArray with the key set for each .send(axis_array).
-    :rtype: collections.abc.Generator[AxisArray, AxisArray, None]
+    :rtype: typing.Generator[AxisArray, AxisArray, None]
     """
     # State variables
     axis_arr_in = AxisArray(np.array([]), dims=[""])
@@ -84,7 +83,7 @@ class SetKey(ez.Unit):
 
     @ez.subscriber(INPUT_SIGNAL, zero_copy=True)
     @ez.publisher(OUTPUT_SIGNAL)
-    async def on_message(self, message: AxisArray) -> AsyncGenerator:
+    async def on_message(self, message: AxisArray) -> typing.AsyncGenerator:
         """
         Process incoming AxisArray messages and set their keys.
         
@@ -94,7 +93,7 @@ class SetKey(ez.Unit):
         :param message: Input AxisArray to modify.
         :type message: AxisArray
         :return: Async generator yielding AxisArray with modified key.
-        :rtype: collections.abc.AsyncGenerator
+        :rtype: typing.AsyncGenerator
         """
         try:
             ret = self.STATE.gen.send(message)
@@ -126,7 +125,7 @@ class FilterOnKey(ez.Unit):
 
     @ez.subscriber(INPUT_SIGNAL, zero_copy=True)
     @ez.publisher(OUTPUT_SIGNAL)
-    async def on_message(self, message: AxisArray) -> AsyncGenerator:
+    async def on_message(self, message: AxisArray) -> typing.AsyncGenerator:
         """
         Filter incoming AxisArray messages based on their key.
         
@@ -136,7 +135,7 @@ class FilterOnKey(ez.Unit):
         :param message: Input AxisArray to filter.
         :type message: AxisArray
         :return: Async generator yielding filtered AxisArray messages.
-        :rtype: collections.abc.AsyncGenerator
+        :rtype: typing.AsyncGenerator
         """
         if message.key == self.SETTINGS.key:
             # Minimal 'touch' to prevent deepcopy by framework

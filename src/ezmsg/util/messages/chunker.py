@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Generator, AsyncGenerator
 import traceback
 import typing
 
@@ -17,7 +16,7 @@ def array_chunker(
     axis: int = 0,
     fs: float = 1000.0,
     tzero: float = 0.0,
-) -> Generator[AxisArray, None, None]:
+) -> typing.Generator[AxisArray, None, None]:
     """
     Create a generator that yields AxisArrays containing chunks of an array
     along a specified axis.
@@ -36,7 +35,7 @@ def array_chunker(
     :param tzero: The time offset of the first chunk. Will only be used to make the time axis.
     :type tzero: float
     :return: A generator that yields AxisArrays containing chunks of the input array.
-    :rtype: collections.abc.Generator[AxisArray, None, None]
+    :rtype: typing.Generator[AxisArray, None, None]
     """
 
     if not type(data) == np.ndarray:
@@ -134,7 +133,7 @@ class ArrayChunker(ez.Unit):
         self.construct_generator()
 
     @ez.publisher(OUTPUT_SIGNAL)
-    async def send_chunk(self) -> AsyncGenerator:
+    async def send_chunk(self) -> typing.AsyncGenerator:
         """
         Publisher method that yields data chunks.
         
@@ -142,7 +141,7 @@ class ArrayChunker(ez.Unit):
         with proper exception handling for completion cases.
         
         :return: Async generator yielding AxisArray chunks.
-        :rtype: collections.abc.AsyncGenerator
+        :rtype: typing.AsyncGenerator
         """
         try:
             while True:

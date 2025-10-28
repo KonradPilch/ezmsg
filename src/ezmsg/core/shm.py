@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Generator
 import logging
 import typing
 
@@ -25,7 +24,7 @@ def _ignore_shm(name, rtype):
 
 
 @contextmanager
-def _untracked_shm() -> Generator[None, None, None]:
+def _untracked_shm() -> typing.Generator[None, None, None]:
     """
     Disable SHM tracking within context - https://bugs.python.org/issue38119.
     
@@ -33,7 +32,7 @@ def _untracked_shm() -> Generator[None, None, None]:
     around a Python bug where shared memory segments are not properly cleaned up.
     
     :return: Context manager generator.
-    :rtype: collections.abc.Generator[None, None, None]
+    :rtype: typing.Generator[None, None, None]
     """
     resource_tracker.register = _ignore_shm
     yield
@@ -62,7 +61,7 @@ class SHMContext:
     """
 
     _shm: SharedMemory
-    _data_block_segs: list[slice]
+    _data_block_segs: typing.List[slice]
 
     num_buffers: int
     buf_size: int
@@ -131,7 +130,7 @@ class SHMContext:
     @contextmanager
     def buffer(
         self, idx: int, readonly: bool = False
-    ) -> Generator[memoryview, None, None]:
+    ) -> typing.Generator[memoryview, None, None]:
         """
         Get a memory view of a specific buffer in the shared memory segment.
         
@@ -140,7 +139,7 @@ class SHMContext:
         :param readonly: Whether to provide read-only access to the buffer.
         :type readonly: bool
         :return: Context manager yielding a memoryview of the buffer.
-        :rtype: collections.abc.Generator[memoryview, None, None]
+        :rtype: typing.Generator[memoryview, None, None]
         :raises BufferError: If shared memory is no longer accessible.
         """
         if self._shm.buf is None:
@@ -220,7 +219,7 @@ class SHMInfo:
     When all leases are released, the shared memory is automatically cleaned up.
     """
     shm: SharedMemory
-    leases: set["asyncio.Task[None]"] = field(default_factory=set)
+    leases: typing.Set["asyncio.Task[None]"] = field(default_factory=set)
 
     def lease(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter

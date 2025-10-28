@@ -1,6 +1,7 @@
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
+from typing import List, Set, DefaultDict
 
 
 class CyclicException(Exception): 
@@ -13,7 +14,7 @@ class CyclicException(Exception):
     ...
 
 
-GraphType = defaultdict[str, set[str]]
+GraphType = DefaultDict[str, Set[str]]
 
 
 @dataclass
@@ -28,12 +29,12 @@ class DAG:
     graph: GraphType = field(default_factory=lambda: defaultdict(set), init=False)
 
     @property
-    def nodes(self) -> set[str]:
+    def nodes(self) -> Set[str]:
         """
         Get all nodes in the graph.
         
         :return: Set of all node names in the graph
-        :rtype: set[str]
+        :rtype: Set[str]
         """
         return set(self.graph.keys())
 
@@ -100,7 +101,7 @@ class DAG:
         self.graph.get(from_node, set()).discard(to_node)
         self._prune()
 
-    def downstream(self, from_node: str) -> list[str]:
+    def downstream(self, from_node: str) -> List[str]:
         """
         Get a list of downstream nodes (including from_node).
         
@@ -109,11 +110,11 @@ class DAG:
         :param from_node: Starting node name
         :type from_node: str
         :return: List of downstream node names including the starting node
-        :rtype: list[str]
+        :rtype: List[str]
         """
         return _bfs(self.graph, from_node) + [from_node]
 
-    def upstream(self, from_node: str) -> list[str]:
+    def upstream(self, from_node: str) -> List[str]:
         """
         Get a list of upstream nodes (including from_node).
         
@@ -123,7 +124,7 @@ class DAG:
         :param from_node: Starting node name
         :type from_node: str
         :return: List of upstream node names including the starting node
-        :rtype: list[str]
+        :rtype: List[str]
         """
         return _bfs(self.invgraph, from_node) + [from_node]
 
@@ -136,7 +137,7 @@ class DAG:
             del self.graph[node]
 
 
-def _leaves(graph: GraphType) -> set[str]:
+def _leaves(graph: GraphType) -> Set[str]:
     """
     Find leaf nodes in a graph.
     
@@ -145,12 +146,12 @@ def _leaves(graph: GraphType) -> set[str]:
     :param graph: The graph to analyze
     :type graph: GraphType
     :return: Set of leaf node names
-    :rtype: set[str]
+    :rtype: Set[str]
     """
-    return {f for f, t in graph.items() if len(t) == 0}
+    return set([f for f, t in graph.items() if len(t) == 0])
 
 
-def _bfs(graph: GraphType, node: str) -> list[str]:
+def _bfs(graph: GraphType, node: str) -> List[str]:
     """
     Breadth-first search of a graph starting from a given node.
     
@@ -161,9 +162,9 @@ def _bfs(graph: GraphType, node: str) -> list[str]:
     :param node: Starting node for the search
     :type node: str
     :return: List of reachable node names (excluding the starting node)
-    :rtype: list[str]
+    :rtype: List[str]
     """
-    connected: set[str] = set()
+    connected: Set[str] = set()
     queue = [node]
     while queue:
         queue += [t for t in graph.get(queue.pop(0), set()) if t not in connected]

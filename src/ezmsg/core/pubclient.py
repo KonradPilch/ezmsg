@@ -28,7 +28,7 @@ from .netprotocol import (
     PUBLISHER_START_PORT_DEFAULT,
 )
 
-from typing import Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("ezmsg")
 
@@ -52,8 +52,8 @@ class Publisher:
     _initialized: asyncio.Event
     _graph_task: "asyncio.Task[None]"
     _connection_task: "asyncio.Task[None]"
-    _subscribers: dict[UUID, SubscriberInfo]
-    _subscriber_tasks: dict[UUID, "asyncio.Task[None]"]
+    _subscribers: Dict[UUID, SubscriberInfo]
+    _subscriber_tasks: Dict[UUID, "asyncio.Task[None]"]
     _address: Address
     _backpressure: Backpressure
     _num_buffers: int
@@ -80,8 +80,8 @@ class Publisher:
         cls,
         topic: str,
         graph_service: GraphService,
-        host: str | None = None,
-        port: int | None = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
         buf_size: int = DEFAULT_SHM_SIZE,
         **kwargs,
     ) -> "Publisher":
@@ -95,9 +95,9 @@ class Publisher:
         :param shm_service: Service for shared memory management.
         :type shm_service: SHMService
         :param host: Optional host address to bind to.
-        :type host: str | None
+        :type host: Optional[str]
         :param port: Optional port number to bind to.
-        :type port: int | None
+        :type port: Optional[int]
         :param buf_size: Size of shared memory buffers.
         :type buf_size: int
         :param kwargs: Additional keyword arguments for Publisher constructor.

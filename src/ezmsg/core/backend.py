@@ -1,9 +1,8 @@
 import asyncio
-from collections.abc import Callable, Mapping, Iterable
-from collections.abc import Collection as AbstractCollection
 import enum
 import logging
 import os
+import typing
 
 from multiprocessing import Event, Barrier
 from multiprocessing.synchronize import Event as EventType
@@ -32,17 +31,17 @@ logger = logging.getLogger("ezmsg")
 
 
 class ExecutionContext:
-    processes: list[BackendProcess]
+    processes: typing.List[BackendProcess]
     term_ev: EventType
     start_barrier: BarrierType
-    connections: list[tuple[str, str]]
+    connections: typing.List[typing.Tuple[str, str]]
 
     def __init__(
         self,
-        processes: list[list[Unit]],
+        processes: typing.List[typing.List[Unit]],
         graph_service: GraphService,
-        connections: list[tuple[str, str]] = [],
-        backend_process: type[BackendProcess] = DefaultBackendProcess,
+        connections: typing.List[typing.Tuple[str, str]] = [],
+        backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
     ) -> None:
         if not processes:
             raise ValueError("Cannot create an execution context for zero processes")
@@ -67,15 +66,15 @@ class ExecutionContext:
     @classmethod
     def setup(
         cls,
-        components: Mapping[str, Component],
+        components: typing.Mapping[str, Component],
         graph_service: GraphService,
-        root_name: str | None = None,
-        connections: NetworkDefinition | None = None,
-        process_components: AbstractCollection[Component] | None = None,
-        backend_process: type[BackendProcess] = DefaultBackendProcess,
+        root_name: typing.Optional[str] = None,
+        connections: typing.Optional[NetworkDefinition] = None,
+        process_components: typing.Optional[typing.Collection[Component]] = None,
+        backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
         force_single_process: bool = False,
-    ) -> "ExecutionContext | None":
-        graph_connections: list[tuple[str, str]] = []
+    ) -> typing.Optional["ExecutionContext"]:
+        graph_connections: typing.List[typing.Tuple[str, str]] = []
 
         for name, component in components.items():
             component._set_name(name)
@@ -94,9 +93,9 @@ class ExecutionContext:
                 graph_connections.append((from_topic, to_topic))
 
         def crawl_components(
-            component: Component, callback: Callable[[Component], None]
+            component: Component, callback: typing.Callable[[Component], None]
         ) -> None:
-            search: list[Component] = [component]
+            search: typing.List[Component] = [component]
             while len(search):
                 comp = search.pop()
                 search += list(comp.components.values())
@@ -148,7 +147,7 @@ def run_system(
     system: Collection,
     num_buffers: int = 32,
     init_buf_size: int = DEFAULT_SHM_SIZE,
-    backend_process: type[BackendProcess] = DefaultBackendProcess,
+    backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
 ) -> None:
     """
     Deprecated function for running a system (Collection).
@@ -163,18 +162,18 @@ def run_system(
     :param init_buf_size: Initial buffer size (deprecated parameter)
     :type init_buf_size: int
     :param backend_process: Backend process class to use
-    :type backend_process: type[BackendProcess]
+    :type backend_process: typing.Type[BackendProcess]
     """
     run(SYSTEM=system, backend_process=backend_process)
 
 
 def run(
-    components: Mapping[str, Component] | None = None,
-    root_name: str | None = None,
-    connections: NetworkDefinition | None = None,
-    process_components: AbstractCollection[Component] | None = None,
-    backend_process: type[BackendProcess] = DefaultBackendProcess,
-    graph_address: AddressType | None = None,
+    components: typing.Optional[typing.Mapping[str, Component]] = None,
+    root_name: typing.Optional[str] = None,
+    connections: typing.Optional[NetworkDefinition] = None,
+    process_components: typing.Optional[typing.Collection[Component]] = None,
+    backend_process: typing.Type[BackendProcess] = DefaultBackendProcess,
+    graph_address: typing.Optional[AddressType] = None,
     force_single_process: bool = False,
     profiler_log_name: str | None = None,
     **components_kwargs: Component,
@@ -191,20 +190,20 @@ def run(
       will create a directed acyclic graph using the contents of ``connections``.
 
     :param components: Dictionary mapping component names to Component objects. The components
-        are the nodes in the ezmsg (directed acyclic) graph.
-    :type components: collections.abc.Mapping[str, Component] | None
+    are the nodes in the ezmsg (directed acyclic) graph.
+    :type components: typing.Optional[typing.Mapping[str, Component]]
     :param root_name: Optional root name for the component hierarchy
-    :type root_name: str | None
+    :type root_name: typing.Optional[str]
     :param connections: Network definition specifying stream connections between components. These
-        are the edges in the ezmsg graph, connecting OutputStreams to InputStreams.
-    :type connections: NetworkDefinition | None
+    are the edges in the ezmsg graph, connecting OutputStreams to InputStreams.
+    :type connections: typing.Optional[NetworkDefinition]
     :param process_components: Collection of components that should run in separate processes
-    :type process_components: collections.abc.Collection[Component] | None
+    :type process_components: typing.Optional[typing.Collection[Component]]
     :param backend_process: Backend process class to use for execution. Currently under development.
-    :type backend_process: type[BackendProcess]
+    :type backend_process: typing.Type[BackendProcess]
     :param graph_address: Address (hostname and port) of graph server which ezmsg should connect to.
-        If not defined, ``ezmsg`` will start a new graph server at 127.0.0.1:25978.
-    :type graph_address: AddressType | None
+    If not defined, ``ezmsg`` will start a new graph server at 127.0.0.1:25978.
+    :type graph_address: typing.Optional[AddressType]
     :param force_single_process: Whether to force all components into a single process
     :type force_single_process: bool
     :param components_kwargs: Additional components specified as keyword arguments
@@ -269,7 +268,7 @@ def run(
         main_process = execution_context.processes[0]
         other_processes = execution_context.processes[1:]
 
-        sentinels: set[Connection | socket | int] = set()
+        sentinels: typing.Set[typing.Union[Connection, socket, int]] = set()
 
         for proc in other_processes:
             proc.start()
@@ -308,9 +307,9 @@ def run(
 
 
 def collect_processes(
-    collection: Collection | Iterable[Component],
-    process_components: AbstractCollection[Component] | None = None,
-) -> list[list[Unit]]:
+    collection: typing.Union[Collection, typing.Iterable[Component]],
+    process_components: typing.Optional[typing.Collection[Component]] = None,
+) -> typing.List[typing.List[Unit]]:
     if isinstance(collection, Collection):
         process_units, units = _collect_processes(
             collection._components.values(), collection.process_components()
@@ -329,10 +328,10 @@ def collect_processes(
 
 
 def _collect_processes(
-    comps: Iterable[Component], process_components: AbstractCollection[Component]
-) -> tuple[list[list[Unit]], list[Unit]]:
-    process_units: list[list[Unit]] = []
-    units: list[Unit] = []
+    comps: typing.Iterable[Component], process_components: typing.Collection[Component]
+) -> typing.Tuple[typing.List[typing.List[Unit]], typing.List[Unit]]:
+    process_units: typing.List[typing.List[Unit]] = []
+    units: typing.List[Unit] = []
 
     for comp in comps:
         if isinstance(comp, Collection):

@@ -1,5 +1,4 @@
 import os
-from collections.abc import Callable
 import asyncio
 import logging
 import socket
@@ -49,7 +48,7 @@ class ThreadedAsyncServer(Thread):
     def address(self) -> Address:
         return Address(*self._sock.getsockname())
 
-    def start(self, address: AddressType | None = None) -> None:
+    def start(self, address: typing.Optional[AddressType] = None) -> None:
         if address is not None:
             self._sock = create_socket(*address)
         else:
@@ -157,30 +156,30 @@ class ServiceManager(typing.Generic[T]):
     
     :type T: A ThreadedAsyncServer subclass type.
     """
-    _address: Address | None = None
-    _factory: Callable[[], T]
+    _address: typing.Optional[Address] = None
+    _factory: typing.Callable[[], T]
 
     ADDR_ENV: str
     PORT_DEFAULT: int
 
     def __init__(
         self,
-        factory: Callable[[], T],
-        address: AddressType | None = None,
+        factory: typing.Callable[[], T],
+        address: typing.Optional[AddressType] = None,
     ) -> None:
         """
         Initialize the service manager.
         
         :param factory: Factory function that creates server instances.
-        :type factory: collections.abc.Callable[[], T]
+        :type factory: typing.Callable[[], T]
         :param address: Optional address tuple (host, port) for the server.
-        :type address: AddressType | None
+        :type address: typing.Optional[AddressType]
         """
         self._factory = factory
         if address is not None:
             self._address = Address(*address)
 
-    async def ensure(self) -> T | None:
+    async def ensure(self) -> typing.Optional[T]:
         """
         Ensure a server is running and accessible.
         
@@ -188,7 +187,7 @@ class ServiceManager(typing.Generic[T]):
         we should ensure a server exists, creates a new server instance.
         
         :return: The server instance if one was created, None if using existing.
-        :rtype: T | None
+        :rtype: typing.Optional[T]
         :raises OSError: If connection fails and no server should be created.
         """
         server = None
@@ -243,12 +242,12 @@ class ServiceManager(typing.Generic[T]):
 
     async def open_connection(
         self,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> typing.Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """
         Open a connection to the managed server.
         
         :return: Tuple of (reader, writer) for communicating with the server.
-        :rtype: tuple[asyncio.StreamReader, asyncio.StreamWriter]
+        :rtype: typing.Tuple[asyncio.StreamReader, asyncio.StreamWriter]
         :raises OSError: If connection cannot be established.
         """
         return await asyncio.open_connection(
