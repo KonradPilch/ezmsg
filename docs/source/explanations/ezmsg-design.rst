@@ -250,7 +250,6 @@ Our preferred Message format is `AxisArray`. See :doc:`axisarray` for more infor
 ********************************
 
 #. :doc:`axisarray`
-#. :doc:`sigproc`
 #. :doc:`../tutorials/start`
 #. :doc:`../how-tos/basics/content-basics`
 #. :doc:`../how-tos/pipeline/content-pipeline`

@@ -51,7 +51,6 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
 }
 intersphinx_disabled_domains = ["std"]
 
@@ -78,8 +77,7 @@ epub_show_urls = "footnote"
 add_module_names = False
 
 branch = "main"
-code_url = f"https://github.com/iscoe/ezmsg/blob/{branch}/"
-sigproc_code_url = f"https://github.com/ezmsg-org/ezmsg-sigproc/blob/{branch}/"
+code_url = f"https://github.com/ezmsg-org/ezmsg/blob/{branch}/"
 
 
 def linkcode_resolve(domain, info):
@@ -88,9 +86,7 @@ def linkcode_resolve(domain, info):
     if not info["module"]:
         return None
     filename = info["module"].replace(".", "/")
-    if "sigproc" in filename:
-        return f"{sigproc_code_url}src/{filename}.py"
-    elif "core" in filename:
+    if "core" in filename:
         return f"{code_url}src/ezmsg/core/__init__.py"
     else:
         return f"{code_url}src/{filename}.py"

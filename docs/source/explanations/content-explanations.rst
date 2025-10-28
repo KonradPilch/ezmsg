@@ -10,7 +10,6 @@ This section of the documentation aims to provide a comprehensive overview of th
 
     ezmsg-design
     axisarray
-    sigproc
 
 Other ways to learn about `ezmsg` include following our :doc:`Tutorial <../tutorials/content-tutorials>`, checking the list of :doc:`HOW TO pages <../how-tos/content-howtos>` and the :doc:`reference documentation <../reference/content-reference>`. 
 
@@ -97,7 +96,6 @@ See :doc:`Extensions page <../extensions/content-extensions>` for more informati
 ********************************
 
 #. :doc:`axisarray`
-#. :doc:`sigproc`
 #. :doc:`../tutorials/start`
 #. :doc:`../how-tos/basics/content-basics`
 #. :doc:`../how-tos/pipeline/content-pipeline`

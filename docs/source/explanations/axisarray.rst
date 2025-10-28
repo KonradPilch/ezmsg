@@ -133,8 +133,6 @@ If you have concerns over this reduced safety, if you set the environment variab
 ********************************
 
 #. :doc:`../reference/API/axisarray`
-#. :doc:`sigproc`
-#. :doc:`../tutorials/signalprocessing`
 
 .. :doc:`../how-tos/axisarray/content-axisarray`
 

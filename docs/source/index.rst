@@ -21,7 +21,7 @@ ezmsg implements much of the LabGraph API (with a few notable differences), and 
 
 The ezmsg library eases the creation of modular systems whose elements can be switched out easily. Consider the use case of building a processing pipeline where you will be experimenting with adding and removing steps until you find an optimal workflow. ezmsg allows you to easily separate each step into a discrete entity and piece together a workflow from those entities. Check out the helpful :doc:`tutorial series <tutorials/content-tutorials>` to see how this works.
 
-.. `Examples <https://github.com/iscoe/ezmsg/tree/master/examples>`_ to see how this works.
+.. `Examples <https://github.com/ezmsg-org/ezmsg/tree/main/examples>`_ to see how this works.
 
 
 |ezmsg_logo_small| Quick start
