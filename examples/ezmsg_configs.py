@@ -1,8 +1,9 @@
 import asyncio
-from collections.abc import AsyncGenerator
 
 import ezmsg.core as ez
 from ezmsg.util.debuglog import DebugLog
+
+from typing import AsyncGenerator, Optional
 
 
 # Terminator -- Arnold Schwarzenegger
@@ -65,7 +66,7 @@ class Modulus(ez.Unit):
 
 
 class ListenerState(ez.State):
-    value: int | None = None
+    value: Optional[int] = None
 
 
 class Listener(ez.Unit):

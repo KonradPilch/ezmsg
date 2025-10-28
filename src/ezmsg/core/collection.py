@@ -1,5 +1,3 @@
-from collections.abc import Iterable
-from collections.abc import Collection as AbstractCollection
 import typing
 from copy import deepcopy
 
@@ -8,9 +6,8 @@ from .component import ComponentMeta, Component
 from .settings import Settings
 
 
-# Iterable of (output_stream, input_stream) pairs defining the network connections
-NetworkDefinition = Iterable[
-    tuple[Stream | str, Stream | str]
+NetworkDefinition = typing.Iterable[
+    typing.Tuple[typing.Union[Stream, str], typing.Union[Stream, str]]
 ]
 
 
@@ -18,8 +15,8 @@ class CollectionMeta(ComponentMeta):
     def __init__(
         cls,
         name: str,
-        bases: tuple[type, ...],
-        fields: dict[str, typing.Any],
+        bases: typing.Tuple[type, ...],
+        fields: typing.Dict[str, typing.Any],
         **kwargs: typing.Any,
     ) -> None:
         super(CollectionMeta, cls).__init__(name, bases, fields)
@@ -40,16 +37,10 @@ class CollectionMeta(ComponentMeta):
 
 class Collection(Component, metaclass=CollectionMeta):
     """
-    Connects :obj:`Unit`\ s together by defining a graph which connects OutputStreams to InputStreams.
-    
-    Collections are composite components that contain and coordinate multiple Units,
-    defining how they communicate through stream connections.
-
-    :param settings: Optional settings object for collection configuration
-    :type settings: Settings | None
+    Connects :obj:`Unit` s together by defining a graph which connects :obj:`OutputStream` s to :obj:`InputStream` s.
     """
 
-    def __init__(self, *args, settings: Settings | None = None, **kwargs):
+    def __init__(self, *args, settings: typing.Optional[Settings] = None, **kwargs):
         super(Collection, self).__init__(*args, settings=settings, **kwargs)
 
         self._components = deepcopy(self.__class__.__components__)
@@ -58,36 +49,23 @@ class Collection(Component, metaclass=CollectionMeta):
 
     def configure(self) -> None:
         """
-        A lifecycle hook that runs when the Collection is instantiated.
-        
-        This is the best place to call ``Unit.apply_settings()`` on each member 
-        Unit of the Collection. Override this method to perform collection-specific
-        configuration of child components.
+        A lifecycle hook that runs when the :obj:`Collection` is instantiated.
+        This is the best place to call ``Unit.apply_settings()`` on each member :obj:`Unit` of the :obj:`Collection`.
         """
         ...
 
     def network(self) -> NetworkDefinition:
         """
-        Override this method and have the definition return a NetworkDefinition 
-        which defines how InputStreams and OutputStreams from member Units will be connected.
-        
-        The NetworkDefinition specifies the message routing between components by
-        connecting output streams to input streams.
-
-        :return: Network definition specifying stream connections
-        :rtype: NetworkDefinition
+        Override this method and have the definition return a :obj:`NetworkDefinition` which defines how
+        :obj:`InputStream` and :obj:`OutputStream` from member :obj:`Unit` s will be connected.
         """
         return ()
 
-    def process_components(self) -> AbstractCollection[Component]:
+    def process_components(self) -> typing.Collection[Component]:
         """
-        Override this method and have the definition return a tuple which contains 
-        Units and Collections which should run in their own processes.
+        Override this method and have the definition return a tuple which contains :obj:`Unit` and :obj:`Collection`
+        which should run in their own processes.
 
-        This method allows you to specify which components should be isolated 
-        in separate processes for performance or isolation requirements.
-
-        :return: Collection of components that should run in separate processes
-        :rtype: collections.abc.Collection[Component]
+        Return: the :obj:`Collection`.
         """
         return (self,)

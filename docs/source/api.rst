@@ -1,5 +1,5 @@
-Components - Units and Collections
-===================================
+API
+===
 
 An ``ezmsg`` pipeline is created from a few basic components.
 ``ezmsg`` provides a framework for you to define your own graphs using its building blocks.
@@ -15,18 +15,16 @@ It is convention to ``import ezmsg.core as ez`` and then use this shorthand in y
    class MyUnit(ez.Unit):
        ...
 
-The two types of nodes in an ezmsg pipeline are ``Unit`` and ``Collection``.
-
-Component
+Components
 ----------
-The base class for ``Unit``\ s and ``Collection``\ s.
 
 .. autoclass:: Component
 
-Unit
----------
+.. autoclass:: Collection
+   :show-inheritance:
+   :members:
 
-The nodes of an ezmsg pipeline graph are ``Unit``\ s.
+.. autoclass:: NetworkDefinition
 
 .. autoclass:: Unit
    :show-inheritance:
@@ -34,22 +32,28 @@ The nodes of an ezmsg pipeline graph are ``Unit``\ s.
    :inherited-members:
 
 
-Collection
-------------
+Unit Function Decorators
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-A ``Collection`` is a special type of ``Component`` that contains other ``Component``\ s (``Unit``\ s and/or other ``Collection``\ s).
+These function decorators can be added to member functions.
 
-.. autoclass:: NetworkDefinition
+.. automethod:: ezmsg.core.subscriber
 
-.. autoclass:: Collection
-   :show-inheritance:
-   :members:
+.. automethod:: ezmsg.core.publisher
+
+.. automethod:: ezmsg.core.main
+
+.. automethod:: unit.thread
+
+.. automethod:: ezmsg.core.task
+
+.. automethod:: ezmsg.core.process
+
+.. automethod:: ezmsg.core.timeit
 
 
 Component Interaction
 ---------------------
-
-Two fundamental attributes of a ``Component`` are its ``Settings`` and ``State``, both of which are optional but initialised by the ezmsg backend during ``Unit`` initialisation (if present).
 
 .. autoclass:: Settings
 
@@ -65,11 +69,16 @@ Facilitates a flow of ``Messages`` into or out of a ``Component``.
 
 .. autoclass:: OutputStream
 
+
 Custom Exceptions
 -----------------
-
-These are custom exceptions defined in ezmsg.
 
 .. autoclass:: Complete
 
 .. autoclass:: NormalTermination
+
+
+Entry Point
+-----------
+
+.. automethod:: ezmsg.core.run

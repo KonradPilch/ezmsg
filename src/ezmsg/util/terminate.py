@@ -3,7 +3,7 @@ import time
 
 import ezmsg.core as ez
 
-from typing import Any
+from typing import Optional, Any
 
 
 class TerminateOnTimeoutSettings(ez.Settings):
@@ -20,7 +20,7 @@ class TerminateOnTimeoutSettings(ez.Settings):
 
 
 class TerminateOnTimeoutState(ez.State):
-    last_msg_timestamp: float | None = None
+    last_msg_timestamp: Optional[float] = None
 
 
 class TerminateOnTimeout(ez.Unit):
@@ -58,11 +58,11 @@ class TerminateOnTotalSettings(ez.Settings):
         total: The total number of messages to terminate after.
     """
 
-    total: int | None = None
+    total: Optional[int] = None
 
 
 class TerminateOnTotalState(ez.State):
-    total: int | None
+    total: Optional[int]
     n_messages: int = 0
 
 
@@ -97,9 +97,6 @@ class TerminateOnTotal(ez.Unit):
         self.maybe_terminate()
 
     def maybe_terminate(self):
-        """
-        Check if termination conditions are met and raise NormalTermination if so.
-        """
         if self.STATE.total is not None:
             if self.STATE.n_messages >= self.STATE.total:
                 raise ez.NormalTermination

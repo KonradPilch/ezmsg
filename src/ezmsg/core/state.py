@@ -1,36 +1,22 @@
 from abc import ABC, ABCMeta
 from dataclasses import dataclass
 
-from typing import Any
+from typing import (
+    Dict,
+    Tuple,
+    Any,
+    Type,
+)
 
 
 class StateMeta(ABCMeta):
-    """
-    Metaclass that automatically applies dataclass decorator to State classes.
-    
-    This metaclass ensures all State subclasses are automatically converted
-    to mutable dataclasses with hash support but no automatic initialization.
-    """
     def __new__(
         cls,
         name: str,
-        bases: tuple[type, ...],
-        classdict: dict[str, Any],
+        bases: Tuple[type, ...],
+        classdict: Dict[str, Any],
         **kwargs: Any,
-    ) -> type["State"]:
-        """
-        Create a new State class with dataclass transformation.
-        
-        :param name: Name of the class being created.
-        :type name: str
-        :param bases: Base classes for the new class.
-        :type bases: tuple[type, ...]
-        :param classdict: Class namespace dictionary.
-        :type classdict: dict[str, Any]
-        :param kwargs: Additional keyword arguments.
-        :return: New State class with dataclass applied.
-        :rtype: type[State]
-        """
+    ) -> Type["State"]:
         new_cls = super().__new__(cls, name, bases, classdict)
         return dataclass(unsafe_hash=True, frozen=False, init=False)(new_cls)  # type: ignore
 

@@ -1,4 +1,3 @@
-from collections.abc import AsyncGenerator
 import json
 import time
 import typing
@@ -14,14 +13,6 @@ from .rate import Rate
 
 
 def log_object(obj: typing.Any) -> str:
-    """
-    Convert an object to a JSON string with timestamp for logging.
-    
-    :param obj: Object to convert to log string
-    :type obj: typing.Any
-    :return: JSON string containing timestamp and object
-    :rtype: str
-    """
     return json.dumps({"ts": time.time(), "obj": obj}, cls=MessageEncoder)
 
 
@@ -37,13 +28,13 @@ class MessageLoggerSettings(ez.Settings):
             If >0, messages are buffered and periodically written to disk in a separate task
     """
 
-    output: Path | None = None
+    output: typing.Optional[Path] = None
     write_period: float = 0.0  # sec
 
 
 class MessageLoggerState(ez.State):
-    output_files: dict[Path, TextIOWrapper] = field(default_factory=dict)
-    write_buffer: list[str] = field(default_factory=list)
+    output_files: typing.Dict[Path, TextIOWrapper] = field(default_factory=dict)
+    write_buffer: typing.List[str] = field(default_factory=list)
 
 
 class MessageLogger(ez.Unit):
@@ -83,15 +74,8 @@ class MessageLogger(ez.Unit):
     """If a file passed to ``INPUT_STOP`` is successfully closed, its path will be published to
     ``OUTPUT_STOP``, otherwise ``None``."""
 
-    def open_file(self, filepath: Path) -> Path | None:
-        """
-        Open a file for message logging.
-        
-        :param filepath: Path to the file to open
-        :type filepath: Path
-        :return: File path if file successfully opened, otherwise None
-        :rtype: Path | None
-        """
+    def open_file(self, filepath: Path) -> typing.Optional[Path]:
+        """Returns file path if file successfully opened, otherwise None"""
         if filepath in self.STATE.output_files:
             # If the file is already open, we return None
             return None
@@ -106,15 +90,8 @@ class MessageLogger(ez.Unit):
 
         return filepath
 
-    def close_file(self, filepath: Path) -> Path | None:
-        """
-        Close a file that was being used for message logging.
-        
-        :param filepath: Path to the file to close
-        :type filepath: Path
-        :return: File path if file successfully closed, otherwise None
-        :rtype: Path | None
-        """
+    def close_file(self, filepath: Path) -> typing.Optional[Path]:
+        """Returns file path if file successfully closed, otherwise None"""
         if filepath not in self.STATE.output_files:
             # We haven't opened this file
             return None
@@ -131,21 +108,21 @@ class MessageLogger(ez.Unit):
 
     @ez.subscriber(INPUT_START)
     @ez.publisher(OUTPUT_START)
-    async def start_file(self, message: Path) -> AsyncGenerator:
+    async def start_file(self, message: Path) -> typing.AsyncGenerator:
         out = self.open_file(message)
         if out is not None:
             yield (self.OUTPUT_START, out)
 
     @ez.subscriber(INPUT_STOP)
     @ez.publisher(OUTPUT_STOP)
-    async def stop_file(self, message: Path) -> AsyncGenerator:
+    async def stop_file(self, message: Path) -> typing.AsyncGenerator:
         out = self.close_file(message)
         if out is not None:
             yield (self.OUTPUT_STOP, out)
 
     @ez.subscriber(INPUT_MESSAGE)
     @ez.publisher(OUTPUT_MESSAGE)
-    async def on_message(self, message: typing.Any) -> AsyncGenerator:
+    async def on_message(self, message: typing.Any) -> typing.AsyncGenerator:
         strmessage = f"{log_object(message)}\n"
 
         if self.SETTINGS.write_period <= 0:

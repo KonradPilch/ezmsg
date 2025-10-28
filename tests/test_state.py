@@ -6,19 +6,21 @@ from dataclasses import field
 
 import ezmsg.core as ez
 
+from typing import Optional, List
+
 
 class ToyState(ez.State):
     integer: int
     string: str
-    opt_integer_default: int | None = field(default=None)
-    list_default_factory: list = field(default_factory=list)
+    opt_integer_default: Optional[int] = field(default=None)
+    list_default_factory: List = field(default_factory=list)
 
 
 class ToySettings(ez.Settings):
-    override_integer: int | None = None
-    override_string: str | None = None
-    override_opt_integer_default: int | None = None
-    override_list_default_factory: list | None = None
+    override_integer: Optional[int] = None
+    override_string: Optional[str] = None
+    override_opt_integer_default: Optional[int] = None
+    override_list_default_factory: Optional[list] = None
 
 
 class ToyUnit(ez.Unit):
@@ -43,10 +45,10 @@ class ToyUnit(ez.Unit):
 @pytest.mark.parametrize("override_opt_integer_default", [None, 3])
 @pytest.mark.parametrize("override_list_default_factory", [None, ["a", "b"]])
 def test_state_configurations(
-    override_integer: int | None,
-    override_string: str | None,
-    override_opt_integer_default: int | None,
-    override_list_default_factory: list | None,
+    override_integer: Optional[int],
+    override_string: Optional[str],
+    override_opt_integer_default: Optional[int],
+    override_list_default_factory: Optional[List],
 ):
     ctx = does_not_raise()
     if override_integer is None or override_string is None:

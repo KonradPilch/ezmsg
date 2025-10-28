@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from typing import AsyncGenerator
 
 import ezmsg.core as ez
 
