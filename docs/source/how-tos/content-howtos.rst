@@ -35,12 +35,7 @@ Creating ezmsg Units and Pipelines
 .. Signal Processing with ezmsg
 .. ********************************
 
-.. The following HOW TOs provide guidance on implementing signal processing functionalities using the ``ezmsg`` extension called ``ezmsg-sigproc``. These HOW TOs are designed to help you create, manage, and optimize signal processing units within the ``ezmsg`` framework.
-
-.. .. toctree::
-..     :maxdepth: 2
-
-..     signalprocessing/content-signalprocessing
+.. The following HOW TOs provide guidance on implementing signal processing functionalities using the ``ezmsg`` extension called ``ezmsg-sigproc``. These HOW TOs are designed to help you create, manage, and optimize signal processing units within the ``ezmsg`` framework. TODO: This is just a placeholder while the content is moved.
 
 .. Advanced ezmsg Usage
 .. *************************
