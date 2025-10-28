@@ -1,0 +1,13 @@
+name: Sync README with docs index
+on:
+  push:
+    paths:
+      - "docs/index.md"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp docs/index.md README.md
+      - run: git diff --quiet || (git config user.name 'github-actions' && git config user.email 'actions@github.com' && git commit -am "sync README with docs/index.md" && git push)
