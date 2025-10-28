@@ -34,12 +34,7 @@ Extensions can be managed manually as well. Here are some of the extensions we m
 |ezmsg_logo_small| Extension API References
 ***********************************************
 
-Further details are available for the following extensions:
-
-.. toctree::
-   :maxdepth: 2
-
-   sigproc/content-sigproc
+TODO: Links to extensions' documentation pages will be added here.
 
 .. |ezmsg_logo_small| image:: ../_static/_images/ezmsg_logo.png
   :width: 40
