@@ -59,21 +59,21 @@ Metrics:
 
 def load_perf(perf: Path) -> xr.Dataset:
 
-    params: typing.List[TestParameters] = []
-    results: typing.List[typing.List[Metrics]] = []
+    all_results: typing.Dict[TestParameters, typing.List[Metrics]] = dict()
 
     with open(perf, 'r') as perf_f:
         info: TestEnvironmentInfo = json.loads(next(perf_f), cls = MessageDecoder)
 
         for line in perf_f:
             obj: TestLogEntry = json.loads(line, cls = MessageDecoder)
-            params.append(obj.params)
-            results.append(obj.results)
+            metrics = all_results.get(obj.params, list())
+            metrics.append(obj.results)
+            all_results[obj.params] = metrics
 
-    n_clients_axis = list(sorted(set([p.n_clients for p in params])))
-    msg_size_axis = list(sorted(set([p.msg_size for p in params])))
-    comms_axis = list(sorted(set([p.comms for p in params])))
-    config_axis = list(sorted(set([p.config for p in params])))
+    n_clients_axis = list(sorted(set([p.n_clients for p in all_results.keys()])))
+    msg_size_axis = list(sorted(set([p.msg_size for p in all_results.keys()])))
+    comms_axis = list(sorted(set([p.comms for p in all_results.keys()])))
+    config_axis = list(sorted(set([p.config for p in all_results.keys()])))
 
     dims = ['n_clients', 'msg_size', 'comms', 'config']
     coords = {
@@ -91,7 +91,7 @@ def load_perf(perf: Path) -> xr.Dataset:
             len(comms_axis), 
             len(config_axis)
         )) * np.nan
-        for p, r in zip(params, results):
+        for p, r in all_results.items():
             # tests are run multiple times; get the median value for each metric
             values = list(sorted([getattr(v, field.name) for v in r]))
             value = values[len(values)//2]
@@ -305,7 +305,10 @@ def summary(perf_path: Path, baseline_path: Path | None, html: bool = False) -> 
     # These raw stats are still valuable to have, but are confusing 
     # when making relative comparisons
     perf = perf.drop_vars(['latency_total', 'num_msgs'])
+    perf = perf.stack(params = ['n_clients', 'msg_size']).dropna('params')
     df = perf.squeeze().to_dataframe()
+    df = df.drop('n_clients', axis = 1)
+    df = df.drop('msg_size', axis = 1)
 
     for _, config_ds in perf.groupby('config'):
         for _, comms_ds in config_ds.groupby('comms'):

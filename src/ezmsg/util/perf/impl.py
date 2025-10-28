@@ -315,7 +315,7 @@ def calculate_metrics(sink: LoadTestSink, duration: float) -> Metrics:
     )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(unsafe_hash=True)
 class TestParameters:
     msg_size: int
     n_clients: int
@@ -328,4 +328,4 @@ class TestParameters:
 @dataclasses.dataclass
 class TestLogEntry:
     params: TestParameters
-    results: typing.List[Metrics]
+    results: Metrics
