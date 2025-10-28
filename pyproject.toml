@@ -9,6 +9,7 @@ authors = [
 ]
 license = { file = "LICENSE" }
 readme = "docs/source/README.rst"
+
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
