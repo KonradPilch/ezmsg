@@ -42,7 +42,7 @@ docs = [
   "ezmsg-sigproc>=2.2.0",
   "sphinxext.rediraffe",
   "myst_parser",
-  "sphinx_autodoc_typehints",
+  "sphinx_autodoc_typehints>=3.0.0",
   "sphinx_copybutton",
   "sphinx_design",
 ]
