@@ -1,6 +1,2 @@
-pydata_sphinx_theme
-ezmsg-sigproc
-sphinxext.rediraffe
-myst_parser
-sphinx_design
-sphinx_autodoc_typehints
+sphinx-rtd-theme
+ezmsg-sigproc @ git+https://github.com/ezmsg-org/ezmsg-sigproc@dev
