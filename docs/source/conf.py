@@ -16,20 +16,16 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.doctest",
     "sphinx.ext.duration",
-    "sphinx.ext.graphviz",
     "sphinx.ext.intersphinx",
     "sphinx.ext.linkcode",
     "sphinx.ext.napoleon",
-    "sphinxext.rediraffe",
-    "myst_parser",
     "sphinx_autodoc_typehints",
     "sphinx_copybutton",
-    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
 
-source_suffix = [".rst", ".md"]
+source_suffix = [".rst"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # The toctree master document
@@ -51,6 +47,9 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "ezmsg.sigproc": ("https://www.ezmsg.org/ezmsg-sigproc/", None),
+    "ezmsg.lsl": ("https://www.ezmsg.org/ezmsg-lsl/", None),
+    "ezmsg.learn": ("https://www.ezmsg.org/ezmsg-learn/", None),
 }
 intersphinx_disabled_domains = ["std"]
 
@@ -61,12 +60,6 @@ html_logo = "_static/_images/ezmsg_logo.png"
 html_favicon = "_static/_images/ezmsg_logo.png"
 
 html_static_path = ["_static"]
-
-# Redirects for pages that are unavailable or moved
-rediraffe_redirects = {
-    "about.rst": "explanations/content-explanations.rst",
-    "getting-started.rst": "tutorials/start.rst",
-}
 
 # Timestamp is inserted at every page bottom in this strftime format.
 html_last_updated_fmt = '%Y-%m-%d'
