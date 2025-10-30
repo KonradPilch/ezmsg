@@ -48,7 +48,7 @@ class State(ABC, metaclass=StateMeta):
           state2: float
 
     To use, declare the ``State`` object for a ``Component`` as a member variable called (all-caps!) ``STATE``.
-    ``ezmsg`` will monitor the variable called ``STATE`` in the background, so it is important to name it correctly.
+    ezmsg will monitor the variable called ``STATE`` in the background, so it is important to name it correctly.
 
     Member functions can then access and mutate ``STATE`` as needed during function execution.
     It is recommended to initialize state values inside the ``initialize()`` or ``configure()`` lifecycle hooks if

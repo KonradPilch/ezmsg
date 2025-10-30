@@ -37,19 +37,17 @@ todo_include_todos = False
 # -- Autodoc configuration ------------------------------
 autodoc_typehints_format = "short"
 python_use_unqualified_type_names = True
-autodoc_type_aliases = {
-    "numpy.typing.NDArray": "numpy NDArray",
-}
+add_module_names = True
 
 # -- Intersphinx configuration --------------------------
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3/", None),
-    "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "ezmsg.sigproc": ("https://www.ezmsg.org/ezmsg-sigproc/", None),
-    "ezmsg.lsl": ("https://www.ezmsg.org/ezmsg-lsl/", None),
-    "ezmsg.learn": ("https://www.ezmsg.org/ezmsg-learn/", None),
+    "python": ("https://docs.python.org/3", None),
+    "sphinx": ("https://www.sphinx-doc.org/en/master", None),
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "ezmsg.sigproc": ("https://www.ezmsg.org/ezmsg-sigproc", None),
+    "ezmsg.lsl": ("https://www.ezmsg.org/ezmsg-lsl", None),
+    "ezmsg.learn": ("https://www.ezmsg.org/ezmsg-learn", None),
 }
 intersphinx_disabled_domains = ["std"]
 

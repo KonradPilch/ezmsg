@@ -1,18 +1,18 @@
 Unit Function Decorators
 ******************************************
 
-These function decorators can be added to member functions.
+These function decorators can be added to member functions of an ezmsg ``Unit`` or ``Collection``.
 
-.. automethod:: ezmsg.core.subscriber
+.. autodecorator:: ezmsg.core.subscriber
 
-.. automethod:: ezmsg.core.publisher
+.. autodecorator:: ezmsg.core.publisher
 
-.. automethod:: ezmsg.core.main
+.. autodecorator:: ezmsg.core.main
 
-.. automethod:: unit.thread
+.. autodecorator:: ezmsg.core.thread
 
-.. automethod:: ezmsg.core.task
+.. autodecorator:: ezmsg.core.task
 
-.. automethod:: ezmsg.core.process
+.. autodecorator:: ezmsg.core.process
 
-.. automethod:: ezmsg.core.timeit
+.. autodecorator:: ezmsg.core.timeit

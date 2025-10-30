@@ -28,7 +28,7 @@ class Message(ABC, metaclass=MessageMeta):
     
     .. deprecated::
        Message is deprecated. Use @dataclass decorators instead of inheriting
-       from ez.Message. For data arrays, use :obj:`ezmsg.core.util.messages.AxisArray`. 
+       from ez.Message. For data arrays, use :obj:`ezmsg.util.messages.AxisArray`. 
     
     .. note::
        This class will issue a DeprecationWarning when instantiated.

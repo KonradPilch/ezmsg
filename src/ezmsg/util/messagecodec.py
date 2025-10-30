@@ -2,6 +2,7 @@
 Message encoding and decoding utilities for ezmsg logging.
 
 This module provides JSON serialization support for complex objects including:
+
 - Dataclass objects with type preservation
 - NumPy arrays with efficient binary encoding
 - Arbitrary objects via pickle fallback
@@ -79,6 +80,7 @@ class MessageEncoder(json.JSONEncoder):
     JSON encoder for ezmsg messages with support for dataclasses, numpy arrays, and arbitrary objects.
     
     This encoder extends the standard JSON encoder to handle:
+    
     - Dataclass objects (serialized as dictionaries with type information)
     - NumPy arrays (serialized as base64-encoded data with metadata)
     - Other objects via pickle (as fallback)
