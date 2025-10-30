@@ -41,6 +41,8 @@ templates_path = ["_templates"]
 source_suffix = [".rst"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+add_module_names = True
+
 # The toctree master document
 master_doc = "index"
 
@@ -50,7 +52,6 @@ todo_include_todos = False
 # -- Autodoc configuration ------------------------------
 autodoc_typehints_format = "short"
 python_use_unqualified_type_names = True
-add_module_names = True
 
 # -- Intersphinx configuration --------------------------
 
@@ -78,8 +79,6 @@ html_last_updated_fmt = '%Y-%m-%d'
 
 # -- Options for EPUB output --------------------------
 epub_show_urls = "footnote"
-
-add_module_names = False
 
 branch = "main"
 code_url = f"https://github.com/ezmsg-org/ezmsg/blob/{branch}/"
