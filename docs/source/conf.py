@@ -1,13 +1,26 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+
 # -- Project information --------------------------
 
 project = "ezmsg"
 copyright = "2022, JHU/APL"
 author = "JHU/APL"
 
-release = "3.3.4"
-version = "3.3.4"
+# Read version from pyproject.toml
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
+pyproject_path = os.path.join(os.path.dirname(__file__), "../../pyproject.toml")
+with open(pyproject_path, "rb") as f:
+    pyproject_data = tomllib.load(f)
+    release = pyproject_data["project"]["version"]
+    version = release
+
 
 # -- General configuration --------------------------
 
@@ -56,6 +69,7 @@ intersphinx_disabled_domains = ["std"]
 html_theme = "pydata_sphinx_theme"
 html_logo = "_static/_images/ezmsg_logo.png"
 html_favicon = "_static/_images/ezmsg_logo.png"
+html_title = f"ezmsg {version}"
 
 html_static_path = ["_static"]
 
