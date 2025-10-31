@@ -186,9 +186,9 @@ def run(
     execution environment, initializes components, and manages the message-passing
     infrastructure. 
 
-    On initialization, ``ezmsg`` will call ``initialize()`` for each :obj:`Unit` and 
-    ``configure()`` for each :obj:`Collection`, if defined. On initialization, ``ezmsg``
-      will create a directed acyclic graph using the contents of ``connections``.
+    On initialization, ezmsg will call ``initialize()`` for each :obj:`Unit` and 
+    ``configure()`` for each :obj:`Collection`, if defined. On initialization, ezmsg
+    will create a directed acyclic graph using the contents of ``connections``.
 
     :param components: Dictionary mapping component names to Component objects. The components
         are the nodes in the ezmsg (directed acyclic) graph.
@@ -203,15 +203,16 @@ def run(
     :param backend_process: Backend process class to use for execution. Currently under development.
     :type backend_process: type[BackendProcess]
     :param graph_address: Address (hostname and port) of graph server which ezmsg should connect to.
-        If not defined, ``ezmsg`` will start a new graph server at 127.0.0.1:25978.
+        If not defined, ezmsg will start a new graph server at 127.0.0.1:25978.
     :type graph_address: AddressType | None
     :param force_single_process: Whether to force all components into a single process
     :type force_single_process: bool
     :param components_kwargs: Additional components specified as keyword arguments
     :type components_kwargs: Component
 
-    .. note::
+    .. note:: 
        Since jupyter notebooks run in a single process, you must set `force_single_process=True`.
+    
     .. note::
        The old method :obj:`run_system` has been deprecated and uses ``run()`` instead.
     """

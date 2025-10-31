@@ -79,7 +79,7 @@ class Unit(Component, metaclass=UnitMeta):
         self._main = self.__class__.__main__
         self._threads = self.__class__.__threads__
 
-    async def setup(self):
+    async def setup(self) -> None:
         """This is called from within the same process this unit will live"""
         self._instantiate_state()
         if not self._settings_applied:
@@ -131,9 +131,11 @@ def publisher(stream: OutputStream):
     :param stream: The output stream to publish messages to
     :type stream: OutputStream
     :return: Decorated function that can publish to the stream
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     :raises ValueError: If stream is not an OutputStream
 
+    Example usage:
+    
     .. code-block:: python
 
       from collections.abc import AsyncGenerator
@@ -170,8 +172,10 @@ def subscriber(stream: InputStream, zero_copy: bool = False):
     :param zero_copy: Whether to use zero-copy message passing (default: False)
     :type zero_copy: bool
     :return: Decorated function that can subscribe to the stream
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     :raises ValueError: If stream is not an InputStream
+
+    Example usage:
 
     .. code-block:: python
 
@@ -205,9 +209,9 @@ def main(func: Callable):
     processing, or cleanup tasks.
 
     :param func: The function to designate as main
-    :type func: Callable
+    :type func: collections.abc.Callable
     :return: The decorated function
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     """
     setattr(func, MAIN_ATTR, True)
     return func
@@ -222,13 +226,13 @@ def timeit(func: Callable):
     optimization. The execution time is logged in milliseconds.
 
     .. note:: Use the ``@profile_subpub`` or ``@profile_method`` decorators
-    from ezmsg-sigproc for more detailed profiling that is stored in a
-    dedicated profiling log file.
+        from ezmsg-sigproc for more detailed profiling that is stored in a
+        dedicated profiling log file.
 
     :param func: The function to time
-    :type func: Callable
+    :type func: collections.abc.Callable
     :return: The decorated function with timing functionality
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     """
     setattr(func, TIMEIT_ATTR, True)
 
@@ -253,9 +257,9 @@ def thread(func: Callable):
     for background tasks, monitoring, or other concurrent operations.
 
     :param func: The function to run as a background thread
-    :type func: Callable
+    :type func: collections.abc.Callable
     :return: The decorated function
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     """
     setattr(func, THREAD_ATTR, True)
     return func
@@ -269,9 +273,9 @@ def task(func: Callable):
     within the unit's primary execution context.
 
     :param func: The function to run as a task
-    :type func: Callable
+    :type func: collections.abc.Callable
     :return: The decorated function
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     """
     setattr(func, TASK_ATTR, True)
     return func
@@ -285,9 +289,9 @@ def process(func: Callable):
     for CPU-intensive operations or when process isolation is required.
 
     :param func: The function to run in its own process
-    :type func: Callable
+    :type func: collections.abc.Callable
     :return: The decorated function
-    :rtype: Callable
+    :rtype: collections.abc.Callable
     """
     setattr(func, PROCESS_ATTR, True)
     return func

@@ -107,7 +107,8 @@ class Component(Addressable, metaclass=ComponentMeta):
     :type settings: Settings | None
 
     .. note::
-    When creating ezmsg nodes, inherit directly from :obj:`Unit` or :obj:`Collection`.
+    
+        When creating ezmsg nodes, inherit directly from :obj:`Unit` or :obj:`Collection`.
     """
 
     _tasks: dict[str, Callable]  # Only Units will have tasks
@@ -194,7 +195,7 @@ class Component(Addressable, metaclass=ComponentMeta):
         Get the dictionary of tasks for this component.
         
         :return: Dictionary mapping task names to their callable functions
-        :rtype: dict[str, Callable]
+        :rtype: dict[str, collections.abc.Callable]
         """
         return self._tasks
 
@@ -224,7 +225,7 @@ class Component(Addressable, metaclass=ComponentMeta):
         Get the main function for this component.
         
         :return: The main callable function, or None if not set
-        :rtype: Callable[..., None] | None
+        :rtype: collections.abc.Callable[..., None] | None
         """
         return self._main
 
@@ -234,6 +235,6 @@ class Component(Addressable, metaclass=ComponentMeta):
         Get the dictionary of thread functions for this component.
         
         :return: Dictionary mapping thread names to their callable functions
-        :rtype: dict[str, Callable]
+        :rtype: dict[str, collections.abc.Callable]
         """
         return self._threads

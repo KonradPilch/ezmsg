@@ -1,34 +1,27 @@
 Components - Units and Collections
 ===================================
 
-An ``ezmsg`` pipeline is created from a few basic components.
-``ezmsg`` provides a framework for you to define your own graphs using its building blocks.
-Inherit from its base components to define a pipeline that works for your project.
+An ezmsg pipeline is created from a few basic components. ezmsg provides a framework for you to define your own graphs using its building blocks. The nodes of the graph that defines a pipeline all inherit from the base class :class:`Component <ezmsg.core.Component>`. The two types of Component are :class:`Unit <ezmsg.core.Unit>` and :class:`Collection <ezmsg.core.Collection>`.
 
-.. automodule:: ezmsg.core
+.. note:: It is convention to ``import ezmsg.core as ez`` and then use this shorthand in your code. e.g.,
 
-Most ``ezmsg`` classes intended for use in building pipelines are available in ``ezmsg.core``.
-It is convention to ``import ezmsg.core as ez`` and then use this shorthand in your code. e.g.,
+   .. code-block:: python
 
-.. code-block:: python
+      class MyUnit(ez.Unit):
+         ...
 
-   class MyUnit(ez.Unit):
-       ...
-
-The two types of nodes in an ezmsg pipeline are ``Unit`` and ``Collection``.
 
 Component
 ----------
-The base class for ``Unit``\ s and ``Collection``\ s.
 
-.. autoclass:: Component
+.. autoclass:: ezmsg.core.Component
 
 Unit
 ---------
 
-The nodes of an ezmsg pipeline graph are ``Unit``\ s.
+The basic nodes of an ezmsg pipeline graph are :class:`Units <ezmsg.core.Unit>`.
 
-.. autoclass:: Unit
+.. autoclass:: ezmsg.core.Unit
    :show-inheritance:
    :members:
    :inherited-members:
@@ -37,11 +30,11 @@ The nodes of an ezmsg pipeline graph are ``Unit``\ s.
 Collection
 ------------
 
-A ``Collection`` is a special type of ``Component`` that contains other ``Component``\ s (``Unit``\ s and/or other ``Collection``\ s).
+A :class:`Collection <ezmsg.core.Collection>` is a special type of :class:`Component <ezmsg.core.Component>` that contains other :class:`Components <ezmsg.core.Component>` (:class:`Units <ezmsg.core.Unit>` and/or other :class:`Collections <ezmsg.core.Collection>`).
 
-.. autoclass:: NetworkDefinition
+.. autoclass:: ezmsg.core.NetworkDefinition
 
-.. autoclass:: Collection
+.. autoclass:: ezmsg.core.Collection
    :show-inheritance:
    :members:
 
@@ -49,27 +42,27 @@ A ``Collection`` is a special type of ``Component`` that contains other ``Compon
 Component Interaction
 ---------------------
 
-Two fundamental attributes of a ``Component`` are its ``Settings`` and ``State``, both of which are optional but initialised by the ezmsg backend during ``Unit`` initialisation (if present).
+Two fundamental attributes of a :class:`Component <ezmsg.core.Component>` are its :class:`Settings <ezmsg.core.Settings>` and :class:`State <ezmsg.core.State>`, both of which are optional but initialised by the ezmsg backend during :class:`Unit <ezmsg.core.Unit>` initialisation (if present).
 
-.. autoclass:: Settings
+.. autoclass:: ezmsg.core.Settings
 
-.. autoclass:: State
+.. autoclass:: ezmsg.core.State
 
 
 Stream
 ------
 
-Facilitates a flow of ``Messages`` into or out of a ``Component``.
+Facilitates a flow of Messages into or out of a :class:`Component <ezmsg.core.Component>`.
 
-.. autoclass:: InputStream
+.. autoclass:: ezmsg.core.InputStream
 
-.. autoclass:: OutputStream
+.. autoclass:: ezmsg.core.OutputStream
 
 Custom Exceptions
 -----------------
 
 These are custom exceptions defined in ezmsg.
 
-.. autoclass:: Complete
+.. autoclass:: ezmsg.core.Complete
 
-.. autoclass:: NormalTermination
+.. autoclass:: ezmsg.core.NormalTermination

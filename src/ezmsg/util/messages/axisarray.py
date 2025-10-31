@@ -53,8 +53,9 @@ class LinearAxis(AxisBase):
     An axis implementation for sparse axes with regular intervals between elements. 
     
     It is called "linear" because it provides a simple linear mapping between
-    indices and element values: value = (index * gain) + offset
-    A typical example is a time axis, with regular sampling rate. 
+    indices and element values: value = (index * gain) + offset.
+
+    A typical example is a time axis (TimeAxis), with regular sampling rate. 
     
     :param gain: Step size (scaling factor) for the linear axis
     :type gain: float
@@ -75,9 +76,9 @@ class LinearAxis(AxisBase):
         Convert index(es) to axis value(s) using the linear transformation.
         
         :param x: Index or array of indices to convert
-        :type x: int | npt.NDArray[np.int_]
+        :type x: int | npt.NDArray[:class:`numpy.int_`]
         :return: Corresponding axis value(s)
-        :rtype: float | npt.NDArray[np.float64]
+        :rtype: float | npt.NDArray[:class:`np.float64`]
         """
         return (x * self.gain) + self.offset
 
@@ -92,11 +93,11 @@ class LinearAxis(AxisBase):
         Convert axis value(s) to index(es) using the inverse linear transformation.
 
         :param v: Axis value or array of values to convert to indices
-        :type v: float | npt.NDArray[np.float64]
+        :type v: float | npt.NDArray[:class:`np.float64`]
         :param fn: Function to apply for rounding (default: np.rint)
         :type fn: collections.abc.Callable
         :return: Corresponding index or array of indices
-        :rtype: int | npt.NDArray[np.int_]
+        :rtype: int | npt.NDArray[:class:`numpy.int_`]
         """
         return fn((v - self.offset) / self.gain).astype(int)
 
@@ -176,7 +177,7 @@ class CoordinateAxis(AxisBase, ArrayWithNamedDims):
         Get coordinate value(s) at the given index(es).
         
         :param x: Index or array of indices to lookup
-        :type x: int | npt.NDArray[np.int_]
+        :type x: int | npt.NDArray[:class:`numpy.int_`]
         :return: Coordinate value(s) at the specified index(es)
         :rtype: typing.Any | npt.NDArray
         """
@@ -230,7 +231,12 @@ class AxisArray(ArrayWithNamedDims):
 
     @dataclass
     class Axis(LinearAxis):
-        # deprecated backward compatibility
+        """
+        Deprecated alias for LinearAxis.
+        
+        .. deprecated:: 3.6.0
+            Use :class:`LinearAxis` instead.
+        """
         def __post_init__(self) -> None:
             warnings.warn(
                 "AxisArray.Axis is a deprecated alias for LinearAxis",
@@ -296,7 +302,7 @@ class AxisArray(ArrayWithNamedDims):
             Get array of all valid indices for this axis.
             
             :return: Array of indices from 0 to len(self)-1
-            :rtype: npt.NDArray[np.int_]
+            :rtype: npt.NDArray[:class:`numpy.int_`]
             """
             return np.arange(len(self))
 

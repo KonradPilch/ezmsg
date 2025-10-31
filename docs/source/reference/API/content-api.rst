@@ -7,7 +7,7 @@ Commonly Used API
 
    components
    functiondecorators
-   axisarray
    entrypoint
-   utils
-   message-utils
+   axisarray
+   axisarray-util-units
+   util-units
