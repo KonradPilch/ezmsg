@@ -7,11 +7,15 @@ import enum
 
 import ezmsg.core as ez
 
+from ezmsg.core.netprotocol import Address
+
 try:
     import numpy as np
 except ImportError:
     ez.logger.error("ezmsg perf requires numpy")
     raise
+
+from .util import stable_perf
 
 
 def collect(
@@ -39,7 +43,8 @@ def collect(
 @dataclasses.dataclass
 class Metrics:
     num_msgs: int
-    sample_rate: float
+    sample_rate_mean: float
+    sample_rate_median: float
     latency_mean: float
     latency_median: float
     latency_total: float
@@ -214,7 +219,8 @@ def perform_test(
     msg_size: int, 
     buffers: int,
     comms: Communication,
-    config: Configurator
+    config: Configurator,
+    graph_address: Address
 ) -> Metrics:
     
     settings = LoadTestSettings(
@@ -261,11 +267,13 @@ def perform_test(
             components["PROC"] = proc_collection
             process_components = [proc_collection]
 
-    ez.run(
-        components = components,
-        connections = connections,
-        process_components = process_components,
-    )
+    with stable_perf():
+        ez.run(
+            components = components,
+            connections = connections,
+            process_components = process_components,
+            graph_address = graph_address
+        )
 
     return calculate_metrics(sink, duration)
 
@@ -286,18 +294,21 @@ def calculate_metrics(sink: LoadTestSink, duration: float) -> Metrics:
         [max((x1 - x0) - 1, 0) for x1, x0 in zip(counters[1:], counters[:-1])]
     )
 
+    rx_timestamps = np.array([rx_ts for _, rx_ts, _ in sink.STATE.received_data])
     num_samples = len(sink.STATE.received_data)
-    ez.logger.info(f"Samples received: {num_samples}")
-    sample_rate = num_samples / duration
-    ez.logger.info(f"Sample rate: {sample_rate} Hz")
+    samplerate_mean = num_samples / duration
+    samplerate_median = 1.0 / float(np.median(np.diff(rx_timestamps)))
     latency_mean = total_latency / num_samples
     latency_median = list(sorted(latency))[len(latency) // 2]
+    total_data = num_samples * sink.SETTINGS.dynamic_size
+    data_rate = total_data / (max_timestamp - min_timestamp)
+
+    ez.logger.info(f"Samples received: {num_samples}")
+    ez.logger.info(f"Mean sample rate: {samplerate_mean} Hz")
+    ez.logger.info(f"Median sample rate: {samplerate_median} Hz")
     ez.logger.info(f"Mean latency: {latency_mean} s")
     ez.logger.info(f"Median latency: {latency_median} s")
     ez.logger.info(f"Total latency: {total_latency} s")
-
-    total_data = num_samples * sink.SETTINGS.dynamic_size
-    data_rate = total_data / (max_timestamp - min_timestamp)
     ez.logger.info(f"Data rate: {data_rate * 1e-6} MB/s")
 
     if dropped_samples:
@@ -307,7 +318,8 @@ def calculate_metrics(sink: LoadTestSink, duration: float) -> Metrics:
 
     return Metrics(
         num_msgs = num_samples,
-        sample_rate = sample_rate,
+        sample_rate_mean = samplerate_mean,
+        sample_rate_median = samplerate_median,
         latency_mean = latency_mean,
         latency_median = latency_median,
         latency_total = total_latency,

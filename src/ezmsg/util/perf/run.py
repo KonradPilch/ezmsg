@@ -6,12 +6,16 @@ import itertools
 import argparse
 import typing
 import random
-import time
 
+from datetime import datetime, timedelta
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
+
+import ezmsg.core as ez
+from ezmsg.core.graphserver import GraphServer
 
 from ..messagecodec import MessageEncoder
 from .envinfo import TestEnvironmentInfo
+from .util import warmup
 from .impl import (
     TestParameters,
     TestLogEntry, 
@@ -19,8 +23,6 @@ from .impl import (
     Communication,
     CONFIGS,
 )
-
-import ezmsg.core as ez
 
 DEFAULT_MSG_SIZES = [2 ** exp for exp in range(4, 25, 8)]
 DEFAULT_N_CLIENTS = [2 ** exp for exp in range(0, 6, 2)]
@@ -84,7 +86,7 @@ else:
     CHECK_FOR_QUIT = _check_for_quit
 
 def get_datestamp() -> str:
-    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def perf_run(    
     duration: float,
@@ -95,6 +97,7 @@ def perf_run(
     comms: typing.Iterable[str] | None,
     configs: typing.Iterable[str] | None,
     grid: bool,
+    warmup_dur: float,
 ) -> None:
     
     if n_clients is None:
@@ -137,41 +140,59 @@ def perf_run(
 
     random.shuffle(test_list)
 
-    with open(f'perf_{get_datestamp()}.txt', 'w') as out_f:
+    server = GraphServer()
+    server.start()
 
-        out_f.write(json.dumps(TestEnvironmentInfo(), cls = MessageEncoder) + "\n")
+    d = datetime(1,1,1) + timedelta(seconds = len(test_list) * duration)
+    total_dur_str = ':'.join([str(n) for n in [d.day - 1, d.hour, d.minute, d.second] if n != 0])
+    ez.logger.info(f"About to run {len(test_list)} tests of {duration} sec each.")
+    ez.logger.info(f"Expected total duration ~{total_dur_str})")
+    ez.logger.info(f"Please try to avoid running other taxing software while this perf test runs.")
+    ez.logger.info(f"NOTE: Tests swallow interrupt. After warmup, use 'q' then [enter] to quit tests early.")
 
-        ez.logger.info("Starting perf tests.  Press 'q' + enter to quit tests early.")
-        time.sleep(3.0) # Give user an opportunity to read message.
+    try:
+        ez.logger.info(f"Warming up for {warmup_dur} seconds...")
+        warmup(warmup_dur)
 
-        for test_idx, (msg_size, clients, conf, comm) in enumerate(test_list):
+        with open(f'perf_{get_datestamp()}.txt', 'w') as out_f:
+            out_f.write(json.dumps(TestEnvironmentInfo(), cls = MessageEncoder) + "\n")
 
-            if CHECK_FOR_QUIT():
-                ez.logger.info("Stopping tests early...")
-                break
+            for test_idx, (msg_size, clients, conf, comm) in enumerate(test_list):
 
-            ez.logger.info(f"TEST {test_idx + 1}/{len(test_list)}: {clients=}, {msg_size=}, conf={conf.__name__}, comm={comm.value}")
+                if CHECK_FOR_QUIT():
+                    ez.logger.info("Stopping tests early...")
+                    break
 
-            output = TestLogEntry(
-                params = TestParameters(
-                    msg_size = msg_size,
-                    n_clients = clients,
-                    config = conf.__name__,
-                    comms = comm.value,
-                    duration = duration,
-                    num_buffers = num_buffers
-                ),
-                results = perform_test(
-                    n_clients = clients,
-                    duration = duration, 
-                    msg_size = msg_size, 
-                    buffers = num_buffers,
-                    comms = comm,
-                    config = conf,
+                ez.logger.info(
+                    f"TEST {test_idx + 1}/{len(test_list)}: " \
+                    f"{clients=}, {msg_size=}, conf={conf.__name__}, " \
+                    f"comm={comm.value}"
                 )
-            )
 
-            out_f.write(json.dumps(output, cls = MessageEncoder) + "\n")
+                output = TestLogEntry(
+                    params = TestParameters(
+                        msg_size = msg_size,
+                        n_clients = clients,
+                        config = conf.__name__,
+                        comms = comm.value,
+                        duration = duration,
+                        num_buffers = num_buffers
+                    ),
+                    results = perform_test(
+                        n_clients = clients,
+                        duration = duration, 
+                        msg_size = msg_size, 
+                        buffers = num_buffers,
+                        comms = comm,
+                        config = conf,
+                        graph_address = server.address
+                    )
+                )
+
+                out_f.write(json.dumps(output, cls = MessageEncoder) + "\n")
+    finally:
+        server.stop()
+
 
 def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
 
@@ -180,8 +201,8 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
     p_run.add_argument(
         "--duration",
         type=float,
-        default=2.0,
-        help="individual test duration in seconds (default = 2.0)",
+        default=0.5,
+        help="individual test duration in seconds (default = 0.5)",
     )
 
     p_run.add_argument(
@@ -194,8 +215,8 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
     p_run.add_argument(
         "--iters", "-i",
         type = int,
-        default = 3,
-        help = "number of times to run each test (default = 3)"
+        default = 50,
+        help = "number of times to run each test (default = 50)"
     )
 
     p_run.add_argument(
@@ -237,6 +258,13 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
             "(default: False; msg_sizes and n_clients must match in length)"
     )
 
+    p_run.add_argument(
+        "--warmup",
+        type = float,
+        default = 60.0,
+        help = "warmup CPU with busy task for some number of seconds (default = 60.0)"
+    )
+
     p_run.set_defaults(_handler=lambda ns: perf_run(
         duration = ns.duration, 
         num_buffers = ns.num_buffers,
@@ -246,4 +274,5 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
         comms = ns.comms,
         configs = ns.configs,
         grid = ns.grid,
+        warmup_dur = ns.warmup,
     ))
