@@ -6,6 +6,7 @@ import itertools
 import argparse
 import typing
 import random
+import time
 
 from datetime import datetime, timedelta
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
@@ -89,9 +90,11 @@ def get_datestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def perf_run(    
-    duration: float,
+    max_duration: float,
+    num_msgs: int,
     num_buffers: int,
     iters: int,
+    repeats: int,
     msg_sizes: typing.Iterable[int] | None,
     n_clients: typing.Iterable[int] | None,
     comms: typing.Iterable[str] | None,
@@ -143,55 +146,70 @@ def perf_run(
     server = GraphServer()
     server.start()
 
-    d = datetime(1,1,1) + timedelta(seconds = len(test_list) * duration)
-    total_dur_str = ':'.join([str(n) for n in [d.day - 1, d.hour, d.minute, d.second] if n != 0])
-    ez.logger.info(f"About to run {len(test_list)} tests of {duration} sec each.")
-    ez.logger.info(f"Expected total duration ~{total_dur_str})")
+    ez.logger.info(f"About to run {len(test_list)} tests (repeated {repeats} times) of {max_duration} sec (max) each.")
+    ez.logger.info(f"During each test, source will attempt to send {num_msgs} messages to the sink.")
     ez.logger.info(f"Please try to avoid running other taxing software while this perf test runs.")
     ez.logger.info(f"NOTE: Tests swallow interrupt. After warmup, use 'q' then [enter] to quit tests early.")
+
+    quitting = False
+
+    start_time = time.time()
 
     try:
         ez.logger.info(f"Warming up for {warmup_dur} seconds...")
         warmup(warmup_dur)
 
         with open(f'perf_{get_datestamp()}.txt', 'w') as out_f:
-            out_f.write(json.dumps(TestEnvironmentInfo(), cls = MessageEncoder) + "\n")
+            for _ in range(repeats):
+                out_f.write(json.dumps(TestEnvironmentInfo(), cls = MessageEncoder) + "\n")
 
-            for test_idx, (msg_size, clients, conf, comm) in enumerate(test_list):
+                for test_idx, (msg_size, clients, conf, comm) in enumerate(test_list):
 
-                if CHECK_FOR_QUIT():
-                    ez.logger.info("Stopping tests early...")
+                    if CHECK_FOR_QUIT():
+                        ez.logger.info("Stopping tests early...")
+                        quitting = True
+                        break
+
+                    ez.logger.info(
+                        f"TEST {test_idx + 1}/{len(test_list)}: " \
+                        f"{clients=}, {msg_size=}, conf={conf.__name__}, " \
+                        f"comm={comm.value}"
+                    )
+
+                    output = TestLogEntry(
+                        params = TestParameters(
+                            msg_size = msg_size,
+                            num_msgs = num_msgs,
+                            n_clients = clients,
+                            config = conf.__name__,
+                            comms = comm.value,
+                            max_duration = max_duration,
+                            num_buffers = num_buffers
+                        ),
+                        results = perform_test(
+                            n_clients = clients,
+                            max_duration = max_duration, 
+                            num_msgs = num_msgs,
+                            msg_size = msg_size, 
+                            buffers = num_buffers,
+                            comms = comm,
+                            config = conf,
+                            graph_address = server.address
+                        )
+                    )
+
+                    out_f.write(json.dumps(output, cls = MessageEncoder) + "\n")
+
+                if quitting:
                     break
 
-                ez.logger.info(
-                    f"TEST {test_idx + 1}/{len(test_list)}: " \
-                    f"{clients=}, {msg_size=}, conf={conf.__name__}, " \
-                    f"comm={comm.value}"
-                )
-
-                output = TestLogEntry(
-                    params = TestParameters(
-                        msg_size = msg_size,
-                        n_clients = clients,
-                        config = conf.__name__,
-                        comms = comm.value,
-                        duration = duration,
-                        num_buffers = num_buffers
-                    ),
-                    results = perform_test(
-                        n_clients = clients,
-                        duration = duration, 
-                        msg_size = msg_size, 
-                        buffers = num_buffers,
-                        comms = comm,
-                        config = conf,
-                        graph_address = server.address
-                    )
-                )
-
-                out_f.write(json.dumps(output, cls = MessageEncoder) + "\n")
     finally:
         server.stop()
+        d = datetime(1,1,1) + timedelta(seconds = time.time() - start_time)
+        dur_str = ':'.join([str(n) for n in [d.day - 1, d.hour, d.minute, d.second] if n != 0])
+        ez.logger.info(f"Tests concluded.  Wallclock Runtime: {dur_str}s")
+
+
 
 
 def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
@@ -199,24 +217,38 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
     p_run = subparsers.add_parser("run", help="run performance test")
 
     p_run.add_argument(
-        "--duration",
+        "--max-duration",
         type=float,
-        default=0.5,
-        help="individual test duration in seconds (default = 0.5)",
+        default=5.0,
+        help="maximum individual test duration in seconds (default = 5.0)",
+    )
+
+    p_run.add_argument(
+        "--num-msgs",
+        type=int,
+        default=1000,
+        help = "number of messages to send per-test (default = 1000)"
     )
 
     p_run.add_argument(
         "--num-buffers",
         type=int,
-        default=32,
-        help="shared memory buffers (default = 32)",
+        default=1,
+        help="shared memory buffers (default = 1)",
     )
 
     p_run.add_argument(
         "--iters", "-i",
         type = int,
-        default = 50,
-        help = "number of times to run each test (default = 50)"
+        default = 5,
+        help = "number of times to run each test (default = 5)"
+    )
+
+    p_run.add_argument(
+        "--repeats", "-r",
+        type = int,
+        default = 10,
+        help = "number of times to repeat the perf (default = 10)"
     )
 
     p_run.add_argument(
@@ -266,9 +298,11 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
     )
 
     p_run.set_defaults(_handler=lambda ns: perf_run(
-        duration = ns.duration, 
+        max_duration = ns.max_duration, 
+        num_msgs = ns.num_msgs,
         num_buffers = ns.num_buffers,
         iters = ns.iters,
+        repeats = ns.repeats,
         msg_sizes = ns.msg_sizes,
         n_clients = ns.n_clients,
         comms = ns.comms,

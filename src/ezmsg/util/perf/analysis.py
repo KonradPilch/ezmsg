@@ -59,16 +59,22 @@ Metrics:
 
 def load_perf(perf: Path) -> xr.Dataset:
 
-    all_results: typing.Dict[TestParameters, typing.List[Metrics]] = dict()
+    all_results: typing.Dict[TestParameters, typing.Dict[int, typing.List[Metrics]]] = dict()
+
+    run_idx = 0
 
     with open(perf, 'r') as perf_f:
         info: TestEnvironmentInfo = json.loads(next(perf_f), cls = MessageDecoder)
-
         for line in perf_f:
-            obj: TestLogEntry = json.loads(line, cls = MessageDecoder)
-            metrics = all_results.get(obj.params, list())
-            metrics.append(obj.results)
-            all_results[obj.params] = metrics
+            obj = json.loads(line, cls = MessageDecoder)    
+            if isinstance(obj, TestEnvironmentInfo):
+                run_idx += 1
+            elif isinstance(obj, TestLogEntry):
+                runs = all_results.get(obj.params, dict())
+                metrics = runs.get(run_idx, list())
+                metrics.append(obj.results)
+                runs[run_idx] = metrics
+                all_results[obj.params] = runs
 
     n_clients_axis = list(sorted(set([p.n_clients for p in all_results.keys()])))
     msg_size_axis = list(sorted(set([p.msg_size for p in all_results.keys()])))
@@ -91,14 +97,14 @@ def load_perf(perf: Path) -> xr.Dataset:
             len(comms_axis), 
             len(config_axis)
         )) * np.nan
-        for p, r in all_results.items():
-            # tests are run multiple times; get the median value for each metric
+        for p, a in all_results.items():
+            # tests are run multiple times; get the median of means
             m[
                 n_clients_axis.index(p.n_clients),
                 msg_size_axis.index(p.msg_size),
                 comms_axis.index(p.comms),
                 config_axis.index(p.config)
-            ] = np.median([getattr(v, field.name) for v in r])
+            ] = np.median([np.mean([getattr(v, field.name) for v in r]) for r in a.values()])
         data_vars[field.name] = xr.DataArray(m, dims = dims, coords = coords)
 
     dataset = xr.Dataset(data_vars, attrs = dict(info = info))
