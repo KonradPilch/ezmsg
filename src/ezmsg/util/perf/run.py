@@ -25,11 +25,11 @@ from .impl import (
     CONFIGS,
 )
 
-DEFAULT_MSG_SIZES = [2 ** exp for exp in range(4, 25, 8)]
-DEFAULT_N_CLIENTS = [2 ** exp for exp in range(0, 6, 2)]
+DEFAULT_MSG_SIZES = [2**4, 2**20]
+DEFAULT_N_CLIENTS = [1, 16]
 DEFAULT_COMMS = [c for c in Communication]
 
-# --- Output Suppression Context Manager (from the previous solution) ---
+# --- Output Suppression Context Manager ---
 @contextmanager
 def suppress_output(verbose: bool = False):
     """Context manager to redirect stdout and stderr to os.devnull"""
@@ -95,8 +95,8 @@ def perf_run(
     num_buffers: int,
     iters: int,
     repeats: int,
-    msg_sizes: typing.Iterable[int] | None,
-    n_clients: typing.Iterable[int] | None,
+    msg_sizes: typing.List[int] | None,
+    n_clients: typing.List[int] | None,
     comms: typing.Iterable[str] | None,
     configs: typing.Iterable[str] | None,
     grid: bool,
@@ -117,8 +117,7 @@ def perf_run(
     if not grid and len(list(n_clients)) != len(list(msg_sizes)):
         ez.logger.warning(
             "Not performing a grid test of all combinations of n_clients and msg_sizes, but " + \
-            "len(n_clients) != len(msg_sizes). " + \
-            "If you want to perform all combinations of n_clients and msg_sizes, use --grid"
+            f"{len(n_clients)=} which is not equal to {len(msg_sizes)=}. "
         )
 
     try:
@@ -230,6 +229,19 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
         help = "number of messages to send per-test (default = 1000)"
     )
 
+    # NOTE: We default num-buffers = 1 because this degenerate perf test scenario (blasting 
+    # messages as fast as possible through the system) results in one of two scenerios: 
+    # 1. A (few) messages is/are enqueued and dequeued before another message is posted
+    # 2. The buffer fills up before being FULLY emptied resulting in longer latency.
+    #    (once a channel enters this condition, it tends to stay in this condition)
+    #
+    # This _indeterminate_ behavior results in bimodal distributions of runtimes that make
+    # A/B performance comparisons difficult.  The perf test is not representative of the vast 
+    # majority of production ezmsg systems where publishing is generally rate-limited.  
+    #
+    # A flow-control algorithm could stabilize perf-test results with num_buffers > 1, but is 
+    # generally implemented by enforcing delays on the publish side which simply degrades 
+    # performance in the vast majority of ezmsg systems. - Griff
     p_run.add_argument(
         "--num-buffers",
         type=int,
@@ -284,13 +296,6 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
     )
 
     p_run.add_argument(
-        "--grid",
-        action = "store_true",
-        help = "perform all combinations of msg_sizes and n_clients " + \
-            "(default: False; msg_sizes and n_clients must match in length)"
-    )
-
-    p_run.add_argument(
         "--warmup",
         type = float,
         default = 60.0,
@@ -307,6 +312,6 @@ def setup_run_cmdline(subparsers: argparse._SubParsersAction) -> None:
         n_clients = ns.n_clients,
         comms = ns.comms,
         configs = ns.configs,
-        grid = ns.grid,
+        grid = True,
         warmup_dur = ns.warmup,
     ))
