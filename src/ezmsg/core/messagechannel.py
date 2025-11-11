@@ -4,10 +4,11 @@ import typing
 import logging
 
 from uuid import UUID
-from contextlib import contextmanager, suppress
+from copy import deepcopy
+from contextlib import contextmanager, suppress, ExitStack
 
 from .shm import SHMContext
-from .messagemarshal import MessageMarshal, NO_MESSAGE
+from .messagemarshal import MessageMarshal
 from .backpressure import Backpressure
 
 from .graphserver import GraphService
@@ -41,7 +42,7 @@ class Channel:
     topic: str
 
     num_buffers: int
-    tcp_cache: typing.List[memoryview]
+    contexts: typing.List[typing.ContextManager | None]
     cache: typing.List[typing.Any]
     cache_id: typing.List[int | None]
     shm: SHMContext | None
@@ -67,7 +68,7 @@ class Channel:
         self.num_buffers = num_buffers
         self.shm = shm
 
-        self.tcp_cache = [memoryview(NO_MESSAGE)] * self.num_buffers
+        self.contexts = [None] * self.num_buffers
         self.cache_id = [None] * self.num_buffers
         self.cache = [None] * self.num_buffers
         self.backpressure = Backpressure(self.num_buffers)
@@ -136,14 +137,10 @@ class Channel:
         return chan
     
     def close(self) -> None:
-        if self.shm is not None:
-            self.shm.close()
         self._graph_task.cancel()
         self._pub_task.cancel()
 
     async def wait_closed(self) -> None:
-        if self.shm is not None:
-            await self.shm.wait_closed()
         with suppress(asyncio.CancelledError):
             await self._graph_task
         with suppress(asyncio.CancelledError):
@@ -179,20 +176,21 @@ class Channel:
 
                 msg_id = await read_int(reader)
                 buf_idx = msg_id % self.num_buffers
-
-                # # Profiling indicates its faster to repeatedly
-                # # reconstruct <=512kB msgs from memory for up to
-                # # about 4 subs -- deepcopy is about 4x slower
-                # # which I suspect will be majority of cases
-                # # With more than 4 subs, one deepcopy may be faster
-                # # for <=512kB msgs, but becomes remarkably time
-                # # consuming for >= 512kB msgs.
-                # cache_msg = len(self.clients) > 4
+                
+                ctx: typing.ContextManager | None = None
+                value: typing.Any = None
 
                 if msg == Command.TX_SHM.value:
                     shm_name = await read_str(reader)
 
                     if self.shm is not None and self.shm.name != shm_name:
+
+                        shm_entries = []
+                        for i, c in enumerate(self.contexts):
+                            if isinstance(c, ExitStack):
+                                shm_entries.append(i)
+                                c.close()
+                            
                         self.shm.close()
                         await self.shm.wait_closed()
                         try:
@@ -202,27 +200,60 @@ class Channel:
                                 "Invalid SHM received from publisher; may be dead"
                             )
                             raise
+
+                        for i in shm_entries:
+                            stack = ExitStack()
+                            view = stack.enter_context(self.shm.buffer(i))
+                            assert MessageMarshal.msg_id(view) == self.cache_id[i]
+                            self.cache[i] = stack.enter_context(MessageMarshal.obj_from_mem(view))
+                            self.contexts[i] = stack
                     
-                    # if cache_msg:
-                    #     ...
+                    assert self.shm is not None
+
+                    ctx = ExitStack()
+                    view = ctx.enter_context(self.shm.buffer(buf_idx))
+                    assert MessageMarshal.msg_id(view) == msg_id
+                    value = ctx.enter_context(MessageMarshal.obj_from_mem(view))
 
                 elif msg == Command.TX_TCP.value:
                     buf_size = await read_int(reader)
                     obj_bytes = await reader.readexactly(buf_size)
-                    self.tcp_cache[buf_idx] = memoryview(obj_bytes).toreadonly()
+                    view = memoryview(obj_bytes).toreadonly()
+                    ctx = MessageMarshal.obj_from_mem(view)
+                    value = ctx.__enter__()
 
-                    # if cache_msg:
-                    #     ...
+                else:
+                    raise ValueError(f"unimplemented data telemetry: {msg}")
 
-                if not self._notify_clients(msg_id):
+                if self._notify_clients(msg_id):
+                    self.cache_id[buf_idx] = msg_id
+                    self.cache[buf_idx] = value
+                    self.contexts[buf_idx] = ctx
+                else:
                     # Nobody is listening; need to ack!
                     self._acknowledge(msg_id)
+                    ctx.__exit__(None, None, None)
 
         except (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError):
             logger.debug(f"connection fail: channel:{self.id} - pub:{self.pub_id}")
 
         finally:
             await close_stream_writer(self._pub_writer)
+            
+            for i in range(self.num_buffers):
+                obj = self.cache[i]
+                self.cache[i] = None
+                del obj
+                
+                self.cache_id[i] = None
+                ctx = self.contexts[i]
+                if ctx is not None:
+                    ctx.__exit__(None, None, None)
+                self.contexts[i] = None
+
+            if self.shm is not None:
+                self.shm.close()
+                
             logger.debug(f"disconnected: channel:{self.id} -> pub:{self.pub_id}")
 
     def _notify_clients(self, msg_id: int) -> bool:
@@ -252,38 +283,29 @@ class Channel:
     def get(self, msg_id: int, client_id: UUID) -> typing.Generator[typing.Any, None, None]:
         """get object from cache; if not in cache and shm provided -- get from shm"""
 
-        dispatched = False
-
         buf_idx = msg_id % self.num_buffers
-        if self.cache_id[buf_idx] == msg_id:
-            dispatched = True
+        if self.cache_id[buf_idx] != msg_id:
+            raise CacheMiss
+        
+        try:
             yield self.cache[buf_idx]
+        finally:
+            self.backpressure.free(client_id, buf_idx)
+            if self.backpressure.buffers[buf_idx].is_empty:
 
-        elif self.shm is not None:
-            with self.shm.buffer(buf_idx, readonly=True) as mem:
-                if MessageMarshal.msg_id(mem) == msg_id:
-                    with MessageMarshal.obj_from_mem(mem) as obj:
-                        dispatched = True
-                        yield obj
+                # If pub is in same process as this channel, avoid TCP
+                if self._local_backpressure is not None:
+                    self._local_backpressure.free(self.id, buf_idx)
+                else:
+                    self._acknowledge(msg_id)
 
-        if not dispatched:
-            tcp_mem = self.tcp_cache[buf_idx]
-            if MessageMarshal.msg_id(tcp_mem) == msg_id:
-                with MessageMarshal.obj_from_mem(tcp_mem) as obj:
-                    dispatched = True
-                    yield obj
-            else: 
-                raise CacheMiss
-
-        self.backpressure.free(client_id, buf_idx)
-        if self.backpressure.buffers[buf_idx].is_empty:
-
-            # If pub is in same process as this channel, avoid TCP
-            if self._local_backpressure is not None:
-                self._local_backpressure.free(self.id, buf_idx)
-                return
-            
-            self._acknowledge(msg_id)
+                # Free cache and release contexts
+                self.cache[buf_idx] = None
+                self.cache_id[buf_idx] = None
+                ctx = self.contexts[buf_idx]
+                if ctx is not None:
+                    ctx.__exit__(None, None, None)
+                self.contexts[buf_idx] = None
 
     def _acknowledge(self, msg_id: int) -> None:
         try:
