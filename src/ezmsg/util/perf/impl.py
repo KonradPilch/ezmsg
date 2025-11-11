@@ -67,15 +67,15 @@ class LoadTestSample:
     dynamic_data: np.ndarray
     key: str
 
+class LoadTestSourceState(ez.State):
+    counter: int = 0
 
 class LoadTestSource(ez.Unit):
     OUTPUT = ez.OutputStream(LoadTestSample)
     SETTINGS = LoadTestSettings
+    STATE = LoadTestSourceState
 
     async def initialize(self) -> None:
-        self.running = True
-        self.counter = 0
-
         self.OUTPUT.num_buffers = self.SETTINGS.buffers
         self.OUTPUT.force_tcp = self.SETTINGS.force_tcp
 
@@ -84,8 +84,6 @@ class LoadTestSource(ez.Unit):
         ez.logger.info(f"Load test publisher started. (PID: {os.getpid()})")
         start_time = time.time()
         for _ in range(self.SETTINGS.num_msgs):
-            if not self.running:
-                break
 
             current_time = time.time()
             if current_time - start_time >= self.SETTINGS.max_duration:
@@ -95,21 +93,20 @@ class LoadTestSource(ez.Unit):
                 self.OUTPUT,
                 LoadTestSample(
                     _timestamp=time.time(),
-                    counter=self.counter,
+                    counter=self.STATE.counter,
                     dynamic_data=np.zeros(
                         int(self.SETTINGS.dynamic_size // 4), dtype=np.float32
                     ),
                     key = self.name,
                 ),
             )
-            self.counter += 1
+            self.STATE.counter += 1
             
         ez.logger.info("Exiting publish")
         raise ez.Complete
     
     async def shutdown(self) -> None:
-        self.running = False
-        ez.logger.info(f"Samples sent: {self.counter}")
+        ez.logger.info(f"Samples sent: {self.STATE.counter}")
 
 
 
