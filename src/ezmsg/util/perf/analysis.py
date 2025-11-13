@@ -59,7 +59,7 @@ Metrics:
 
 def load_perf(perf: Path) -> xr.Dataset:
 
-    all_results: typing.Dict[TestParameters, typing.Dict[int, typing.List[Metrics]]] = dict()
+    all_results: dict[TestParameters, dict[int, list[Metrics]]] = dict()
 
     run_idx = 0
 

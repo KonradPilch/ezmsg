@@ -42,11 +42,11 @@ class Channel:
     topic: str
 
     num_buffers: int
-    contexts: typing.List[typing.ContextManager | None]
-    cache: typing.List[typing.Any]
-    cache_id: typing.List[int | None]
+    contexts: list[typing.ContextManager | None]
+    cache: list[typing.Any]
+    cache_id: list[int | None]
     shm: SHMContext | None
-    clients: typing.Dict[UUID, NotificationQueue | None]
+    clients: dict[UUID, NotificationQueue | None]
     backpressure: Backpressure
 
     _graph_task: asyncio.Task[None]
@@ -359,7 +359,7 @@ def _ensure_address(address: AddressType | None) -> Address:
 
 class ChannelManager:
     
-    _registry: typing.Dict[Address, typing.Dict[UUID, Channel]]
+    _registry: dict[Address, dict[UUID, Channel]]
 
     def __init__(self):
         default_address = Address.from_string(GRAPHSERVER_ADDR)

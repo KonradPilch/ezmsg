@@ -60,7 +60,7 @@ class TestEnvironmentInfo:
             lines.append(f"  {key.ljust(width)} : {value}")
         return "\n".join(lines)
     
-    def diff(self, other: "TestEnvironmentInfo") -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]:
+    def diff(self, other: "TestEnvironmentInfo") -> dict[str, tuple[typing.Any, typing.Any]]:
         """Return a structured diff: {field: (self_value, other_value)} for changed fields."""
         a = dataclasses.asdict(self)
         b = dataclasses.asdict(other)
@@ -68,7 +68,7 @@ class TestEnvironmentInfo:
         return {k: (a.get(k), b.get(k)) for k in keys if a.get(k) != b.get(k)}
 
 
-def format_env_diff(diffs: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]) -> str:
+def format_env_diff(diffs: dict[str, tuple[typing.Any, typing.Any]]) -> str:
     """Pretty-print the structured diff in the same aligned style."""
     if not diffs:
         return "No differences."

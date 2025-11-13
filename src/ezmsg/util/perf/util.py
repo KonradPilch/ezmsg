@@ -7,7 +7,7 @@ import contextlib
 import subprocess
 import platform
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Iterable
 
 try:
     import psutil  # optional but helpful
@@ -255,34 +255,3 @@ def stable_perf(opts: PerfOptions = PerfOptions()):
             yield
     finally:
         cm_stack.close()
-
-# ---------- Example runners ----------
-
-def run_interleaved(configs: List[dict], run_fn, trials: int = 5, trial_seconds: float = 30.0, seed: int = 42):
-    """
-    Interleave scenarios to cancel slow drift. `run_fn(config, seconds, seed_offset)` should return a dict of metrics.
-    Returns a list of per-trial results per config.
-    """
-    import random
-    random.seed(seed)
-    results = [ [] for _ in configs ]
-    order = list(range(len(configs)))
-    # fixed order per pass; you'll re-use the same order for stability
-    for t in range(trials):
-        for idx in order:
-            res = run_fn(configs[idx], trial_seconds, seed + t)
-            results[idx].append(res)
-    return results
-
-def summarize_metric(trials: List[dict], key: str, mom_buckets: int = 5):
-    """
-    Extract a metric across trial dicts and summarize with median-of-means and CV.
-    """
-    vals = [float(tr[key]) for tr in trials if key in tr]
-    return {
-        "count": len(vals),
-        "mom": median_of_means(vals, mom_buckets),
-        "mean": sum(vals)/len(vals) if vals else float("nan"),
-        "p50": stats.median(vals) if vals else float("nan"),
-        "cv": coef_var(vals) if vals else float("nan"),
-    }

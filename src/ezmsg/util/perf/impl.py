@@ -78,6 +78,7 @@ class LoadTestSource(ez.Unit):
     async def initialize(self) -> None:
         self.OUTPUT.num_buffers = self.SETTINGS.buffers
         self.OUTPUT.force_tcp = self.SETTINGS.force_tcp
+        self.OUTPUT.batch_write = True
 
     @ez.publisher(OUTPUT)
     async def publish(self) -> typing.AsyncGenerator:
@@ -122,10 +123,10 @@ class LoadTestRelay(ez.Unit):
 
 class LoadTestReceiverState(ez.State):
     # Tuples of sent timestamp, received timestamp, counter, dynamic size
-    received_data: typing.List[typing.Tuple[float, float, int]] = dataclasses.field(
+    received_data: list[tuple[float, float, int]] = dataclasses.field(
         default_factory=list
     )
-    counters: typing.Dict[str, int] = dataclasses.field(default_factory=dict)
+    counters: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
 class LoadTestReceiver(ez.Unit):
