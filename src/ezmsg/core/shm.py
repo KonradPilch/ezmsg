@@ -125,8 +125,22 @@ class SHMContext:
         except (ConnectionResetError, BrokenPipeError) as e:
             logger.debug(f"SHMContext {self.name} GraphServer {type(e)}")
         finally:
-            await close_stream_writer(writer)
             self._shm.close()
+            await close_stream_writer(writer)
+
+    def __getitem__(self, idx: int) -> memoryview:
+        """
+        Get a memory view of a specific buffer in the shared memory segment.
+        
+        :param idx: Index of the buffer to access.
+        :type idx: int
+        :return: A memoryview of the buffer.
+        :rtype: memoryview
+        :raises BufferError: If shared memory is no longer accessible.
+        """
+        if self._shm.buf is None:
+            raise BufferError(f"cannot access {self.name}: server disconnected")
+        return self._shm.buf[self._data_block_segs[idx]]
 
     @contextmanager
     def buffer(
@@ -143,10 +157,7 @@ class SHMContext:
         :rtype: collections.abc.Generator[memoryview, None, None]
         :raises BufferError: If shared memory is no longer accessible.
         """
-        if self._shm.buf is None:
-            raise BufferError(f"cannot access {self.name}: server disconnected")
-
-        with self._shm.buf[self._data_block_segs[idx]] as mem:
+        with self[idx] as mem:
             if readonly:
                 ro_mem = mem.toreadonly()
                 yield ro_mem

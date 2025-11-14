@@ -4,8 +4,7 @@ import typing
 import logging
 
 from uuid import UUID
-from copy import deepcopy
-from contextlib import contextmanager, suppress, ExitStack
+from contextlib import contextmanager, suppress
 
 from .shm import SHMContext
 from .messagemarshal import MessageMarshal
@@ -33,6 +32,124 @@ NotificationQueue = asyncio.Queue[typing.Tuple[UUID, int]]
 class CacheMiss(Exception): ...
 
 
+class CacheEntry(typing.NamedTuple):
+    object: typing.Any
+    msg_id: int
+    context: typing.ContextManager | None
+    memory: memoryview | None
+
+
+class MessageCache:
+
+    _cache: list[CacheEntry | None]
+
+    def __init__(self, num_buffers: int) -> None:
+        self._cache = [None] * num_buffers
+
+    def _buf_idx(self, msg_id: int) -> int:
+        return msg_id % len(self._cache)
+
+    def __getitem__(self, msg_id: int) -> typing.Any:
+        """
+        Get a cached object by msg_id
+        
+        :param msg_id: Message ID to retreive from cache
+        :type msg_id: int
+        :raises CacheMiss: If this msg_id does not exist in the cache.
+        """
+        entry = self._cache[self._buf_idx(msg_id)]
+        if entry is None or entry.msg_id != msg_id:
+            raise CacheMiss
+        return entry.object
+    
+    def keys(self) -> list[int]:
+        """
+        Get a list of current cached msg_ids
+        """
+        return [entry.msg_id for entry in self._cache if entry is not None]
+    
+    def put_local(self, obj: typing.Any, msg_id: int) -> None:
+        """
+        Put an object with associated msg_id directly into cache
+        
+        :param obj: Object to put in cache.
+        :type obj: typing.Any
+        :param msg_id: ID associated with this message/object.
+        :type msg_id: int
+        """
+        self._put(
+            CacheEntry(
+                object = obj,
+                msg_id = msg_id,
+                context = None,
+                memory = None,
+            )
+        )
+
+    def put_from_mem(self, mem: memoryview) -> None:
+        """
+        Reconstitute a message in mem and keep it in cache, releasing and
+        overwriting the existing slot in cache.
+        This method passes the lifecycle of the memoryview to the MessageCache
+        and the memoryview will be properly released by the cache with `free`
+        
+        :param mem: Source memoryview containing serialized object.
+        :type from_mem: memoryview
+        :raises UninitializedMemory: If mem buffer is not properly initialized.
+        """
+        ctx = MessageMarshal.obj_from_mem(mem)
+        self._put(
+            CacheEntry(
+                object = ctx.__enter__(),
+                msg_id = MessageMarshal.msg_id(mem),
+                context = ctx,
+                memory = mem,
+            )
+        )
+
+    def _put(self, entry: CacheEntry) -> None:
+        buf_idx = self._buf_idx(entry.msg_id)
+        self._release(buf_idx)
+        self._cache[buf_idx] = entry
+
+    def _release(self, buf_idx: int) -> None:
+        entry = self._cache[buf_idx]
+        if entry is not None:
+            mem = entry.memory
+            ctx = entry.context
+            if ctx is not None:
+                ctx.__exit__(None, None, None)
+            del entry
+            self._cache[buf_idx] = None
+            if mem is not None:
+                mem.release()
+        
+    def release(self, msg_id: int) -> None:
+        """
+        Release memory for the entry associated with msg_id
+        
+        :param mem: Source memoryview containing serialized object.
+        :type from_mem: memoryview
+        :raises UninitializedMemory: If mem buffer is not properly initialized.
+        """
+        buf_idx = self._buf_idx(msg_id)
+        entry = self._cache[buf_idx]
+        if entry is None or entry.msg_id != msg_id:
+            raise CacheMiss
+        self._release(buf_idx)
+
+    def clear(self) -> None:
+        """
+        Release all cached objects
+        
+        :param mem: Source memoryview containing serialized object.
+        :type from_mem: memoryview
+        :raises UninitializedMemory: If mem buffer is not properly initialized.
+        """
+        for i in range(len(self._cache)):
+            self._release(i)
+
+
 class Channel:
     """cache-backed message channel for a particular publisher"""
 
@@ -42,9 +159,7 @@ class Channel:
     topic: str
 
     num_buffers: int
-    contexts: list[typing.ContextManager | None]
-    cache: list[typing.Any]
-    cache_id: list[int | None]
+    cache: MessageCache
     shm: SHMContext | None
     clients: dict[UUID, NotificationQueue | None]
     backpressure: Backpressure
@@ -68,9 +183,7 @@ class Channel:
         self.num_buffers = num_buffers
         self.shm = shm
 
-        self.contexts = [None] * self.num_buffers
-        self.cache_id = [None] * self.num_buffers
-        self.cache = [None] * self.num_buffers
+        self.cache = MessageCache(self.num_buffers)
         self.backpressure = Backpressure(self.num_buffers)
         self.clients = dict()
         self._graph_address = graph_address
@@ -108,6 +221,7 @@ class Channel:
             shm = await graph_service.attach_shm(shm_name)
             writer.write(Command.SHM_OK.value)
         except (ValueError, OSError):
+            shm = None
             writer.write(Command.SHM_ATTACH_FAILED.value)
         writer.write(uint64_to_bytes(os.getpid()))
 
@@ -137,14 +251,16 @@ class Channel:
         return chan
     
     def close(self) -> None:
-        self._graph_task.cancel()
         self._pub_task.cancel()
+        self._graph_task.cancel()
 
     async def wait_closed(self) -> None:
         with suppress(asyncio.CancelledError):
-            await self._graph_task
-        with suppress(asyncio.CancelledError):
             await self._pub_task
+        with suppress(asyncio.CancelledError):
+            await self._graph_task
+        if self.shm is not None:
+            await self.shm.wait_closed()
     
     async def _graph_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -176,23 +292,17 @@ class Channel:
 
                 msg_id = await read_int(reader)
                 buf_idx = msg_id % self.num_buffers
-                
-                ctx: typing.ContextManager | None = None
-                value: typing.Any = None
 
                 if msg == Command.TX_SHM.value:
                     shm_name = await read_str(reader)
 
                     if self.shm is not None and self.shm.name != shm_name:
 
-                        shm_entries = []
-                        for i, c in enumerate(self.contexts):
-                            if isinstance(c, ExitStack):
-                                shm_entries.append(i)
-                                c.close()
-                            
+                        shm_entries = self.cache.keys()
+                        self.cache.clear()
                         self.shm.close()
                         await self.shm.wait_closed()
+
                         try:
                             self.shm = await GraphService(self._graph_address).attach_shm(shm_name)
                         except ValueError:
@@ -201,59 +311,43 @@ class Channel:
                             )
                             raise
 
-                        for i in shm_entries:
-                            stack = ExitStack()
-                            view = stack.enter_context(self.shm.buffer(i))
-                            assert MessageMarshal.msg_id(view) == self.cache_id[i]
-                            self.cache[i] = stack.enter_context(MessageMarshal.obj_from_mem(view))
-                            self.contexts[i] = stack
+                        for id in shm_entries:
+                            self.cache.put_from_mem(self.shm[id % self.num_buffers])
                     
                     assert self.shm is not None
-
-                    ctx = ExitStack()
-                    view = ctx.enter_context(self.shm.buffer(buf_idx))
-                    assert MessageMarshal.msg_id(view) == msg_id
-                    value = ctx.enter_context(MessageMarshal.obj_from_mem(view))
+                    assert MessageMarshal.msg_id(self.shm[buf_idx]) == msg_id
+                    self.cache.put_from_mem(self.shm[buf_idx])
 
                 elif msg == Command.TX_TCP.value:
                     buf_size = await read_int(reader)
                     obj_bytes = await reader.readexactly(buf_size)
-                    view = memoryview(obj_bytes).toreadonly()
-                    ctx = MessageMarshal.obj_from_mem(view)
-                    value = ctx.__enter__()
+                    assert MessageMarshal.msg_id(obj_bytes) == msg_id
+                    self.cache.put_from_mem(memoryview(obj_bytes).toreadonly())
 
                 else:
                     raise ValueError(f"unimplemented data telemetry: {msg}")
 
-                if self._notify_clients(msg_id):
-                    self.cache_id[buf_idx] = msg_id
-                    self.cache[buf_idx] = value
-                    self.contexts[buf_idx] = ctx
-                else:
+                if not self._notify_clients(msg_id):
                     # Nobody is listening; need to ack!
+                    self.cache.release(msg_id)
                     self._acknowledge(msg_id)
-                    ctx.__exit__(None, None, None)
 
         except (ConnectionResetError, BrokenPipeError, asyncio.IncompleteReadError):
             logger.debug(f"connection fail: channel:{self.id} - pub:{self.pub_id}")
 
         finally:
-            await close_stream_writer(self._pub_writer)
-            
-            for i in range(self.num_buffers):
-                obj = self.cache[i]
-                self.cache[i] = None
-                del obj
-                
-                self.cache_id[i] = None
-                ctx = self.contexts[i]
-                if ctx is not None:
-                    ctx.__exit__(None, None, None)
-                self.contexts[i] = None
+            # await close_stream_writer(self._pub_writer)
+            self._pub_writer.close()
+
+            await self.backpressure.sync()
+            if self._local_backpressure is not None:
+                await self._local_backpressure.sync()
+
+            self.cache.clear()
 
             if self.shm is not None:
                 self.shm.close()
-                
+
             logger.debug(f"disconnected: channel:{self.id} -> pub:{self.pub_id}")
 
     def _notify_clients(self, msg_id: int) -> bool:
@@ -275,37 +369,34 @@ class Channel:
         
         buf_idx = msg_id % self.num_buffers
         if self._notify_clients(msg_id):
-            self.cache_id[buf_idx] = msg_id
-            self.cache[buf_idx] = msg
+            self.cache.put_local(msg, msg_id)
             self._local_backpressure.lease(self.id, buf_idx)
 
     @contextmanager
     def get(self, msg_id: int, client_id: UUID) -> typing.Generator[typing.Any, None, None]:
-        """get object from cache; if not in cache and shm provided -- get from shm"""
-
-        buf_idx = msg_id % self.num_buffers
-        if self.cache_id[buf_idx] != msg_id:
-            raise CacheMiss
+        """
+        Get a message
+        
+        :param msg_id: Message ID to retreive
+        :type msg_id: int
+        :param client_id: UUID of client retreiving this message for backpressure purposes
+        :type client_id: UUID
+        :raises CacheMiss: If this msg_id does not exist in the cache.
+        """
         
         try:
-            yield self.cache[buf_idx]
+            yield self.cache[msg_id]
         finally:
+            buf_idx = msg_id % self.num_buffers
             self.backpressure.free(client_id, buf_idx)
             if self.backpressure.buffers[buf_idx].is_empty:
+                self.cache.release(msg_id)
 
                 # If pub is in same process as this channel, avoid TCP
                 if self._local_backpressure is not None:
                     self._local_backpressure.free(self.id, buf_idx)
                 else:
                     self._acknowledge(msg_id)
-
-                # Free cache and release contexts
-                self.cache[buf_idx] = None
-                self.cache_id[buf_idx] = None
-                ctx = self.contexts[buf_idx]
-                if ctx is not None:
-                    ctx.__exit__(None, None, None)
-                self.contexts[buf_idx] = None
 
     def _acknowledge(self, msg_id: int) -> None:
         try:
@@ -341,10 +432,6 @@ class Channel:
             self._local_backpressure = None
 
         del self.clients[client_id]
-
-    def clear_cache(self):
-        self.cache_id = [None] * self.num_buffers
-        self.cache = [None] * self.num_buffers
 
 
 def _ensure_address(address: AddressType | None) -> Address:
@@ -418,7 +505,7 @@ class ChannelManager:
         client_id: UUID, 
         graph_address: AddressType | None = None
     ) -> None:
-        channel = await self.get(pub_id, graph_address)
+        channel = await self.get(pub_id, graph_address, create = False)
         channel.unregister_client(client_id)
 
         if len(channel.clients) == 0:

@@ -84,25 +84,24 @@ class Marshal:
             sidx += blen
 
     @classmethod
-    def _assert_initialized(cls, mem: memoryview) -> None:
-        if mem[:_PREAMBLE_LEN] != _PREAMBLE:
+    def _assert_initialized(cls, raw: memoryview | bytes) -> None:
+        if raw[:_PREAMBLE_LEN] != _PREAMBLE:
             raise UninitializedMemory
 
     @classmethod
-    def msg_id(cls, mem: memoryview) -> int | None:
+    def msg_id(cls, raw: memoryview | bytes) -> int:
         """
-        Get msg_id currently written in mem; if uninitialized, return None.
+        Get msg_id from a buffer; if uninitialized, return None.
         
-        :param mem: Memory buffer to read from.
-        :type mem: memoryview
-        :return: Message ID if memory is initialized, None otherwise.
-        :rtype: int | None
+        :param mem: buffer to read from.
+        :type mem: memoryview | bytes
+        :return: Message ID of encoded message
+        :rtype: int
+        :raises UndersizedMemory: If buffer is not initialized.
         """
-        try:
-            cls._assert_initialized(mem)
-            return bytes_to_uint(mem[_PREAMBLE_LEN : _PREAMBLE_LEN + UINT64_SIZE])
-        except UninitializedMemory:
-            return None
+        cls._assert_initialized(raw)
+        return bytes_to_uint(raw[_PREAMBLE_LEN : _PREAMBLE_LEN + UINT64_SIZE])
+
 
     @classmethod
     @contextmanager
@@ -214,11 +213,12 @@ class Marshal:
         :type from_mem: memoryview
         :param to_mem: Target memory buffer for copying.
         :type to_mem: memoryview
+        :raises UninitializedMemory: If from_mem buffer is not properly initialized.
         """
         msg_id = cls.msg_id(from_mem)
-        if msg_id is not None:
-            with MessageMarshal.obj_from_mem(from_mem) as obj:
-                MessageMarshal.to_mem(msg_id, obj, to_mem)
+        with MessageMarshal.obj_from_mem(from_mem) as obj:
+            MessageMarshal.to_mem(msg_id, obj, to_mem)
+        
 
 
 # If some other byte-level representation is desired, you can just 

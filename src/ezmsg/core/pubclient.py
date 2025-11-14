@@ -11,7 +11,7 @@ from .backpressure import Backpressure
 from .shm import SHMContext
 from .graphserver import GraphService
 from .messagechannel import CHANNELS, Channel
-from .messagemarshal import MessageMarshal
+from .messagemarshal import MessageMarshal, UninitializedMemory
 
 from .netprotocol import (
     Address,
@@ -440,9 +440,12 @@ class Publisher:
                         new_shm = await GraphService(self._graph_address).create_shm(self._num_buffers, total_size * 2)
                         
                         for i in range(self._num_buffers):
-                            with self._shm.buffer(i, readonly=True) as from_buf:
-                                with new_shm.buffer(i) as to_buf:
-                                    MessageMarshal.copy_obj(from_buf, to_buf)
+                            try:
+                                with self._shm.buffer(i, readonly=True) as from_buf:
+                                    with new_shm.buffer(i) as to_buf:
+                                        MessageMarshal.copy_obj(from_buf, to_buf)
+                            except UninitializedMemory:
+                                pass
                         
                         self._shm.close()
                         self._shm = new_shm
