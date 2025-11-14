@@ -78,7 +78,6 @@ class LoadTestSource(ez.Unit):
     async def initialize(self) -> None:
         self.OUTPUT.num_buffers = self.SETTINGS.buffers
         self.OUTPUT.force_tcp = self.SETTINGS.force_tcp
-        self.OUTPUT.batch_write = True
 
     @ez.publisher(OUTPUT)
     async def publish(self) -> typing.AsyncGenerator:

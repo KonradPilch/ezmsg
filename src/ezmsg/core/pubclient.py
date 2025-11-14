@@ -43,7 +43,6 @@ BACKPRESSURE_REFRACTORY = 5.0  # sec
 class PubChannelInfo(ChannelInfo):
     pid: int
     shm_ok: bool = False
-    batch: list[bytes] = field(default_factory = list)
 
 
 class Publisher:
@@ -72,7 +71,6 @@ class Publisher:
     _msg_id: int
     _shm: SHMContext
     _force_tcp: bool
-    _batch_write: bool
     _last_backpressure_event: float
 
     _graph_address: AddressType | None
@@ -99,7 +97,6 @@ class Publisher:
         num_buffers: int = 32,
         start_paused: bool = False,
         force_tcp: bool = False,
-        batch_write: bool = False,
     ) -> "Publisher":
         """
         Create a new Publisher instance and register it with the graph server.
@@ -136,7 +133,6 @@ class Publisher:
             num_buffers = num_buffers, 
             start_paused = start_paused, 
             force_tcp = force_tcp,
-            batch_write = batch_write
         )
 
         start_port = int(
@@ -191,7 +187,6 @@ class Publisher:
         num_buffers: int = 32,
         start_paused: bool = False,
         force_tcp: bool = False,
-        batch_write: bool = False,
     ) -> None:
         """
         Initialize a Publisher instance.
@@ -223,7 +218,6 @@ class Publisher:
         self._num_buffers = num_buffers
         self._backpressure = Backpressure(num_buffers)
         self._force_tcp = force_tcp
-        self._batch_write = batch_write
         self._last_backpressure_event = -1
         self._graph_address = graph_address
 
@@ -477,18 +471,9 @@ class Publisher:
                         )
 
                     try:
-                        if self._batch_write:
-                            channel.batch.append(msg)
-                            if len(channel.batch) == self._num_buffers:
-                                channel.writer.write(b''.join(channel.batch))
-                                channel.batch.clear()
-                                await channel.writer.drain()
-                                for i in range(self._num_buffers):
-                                    self._backpressure.lease(channel.id, i)
-                        else:
-                            channel.writer.write(msg)
-                            await channel.writer.drain()
-                            self._backpressure.lease(channel.id, buf_idx)
+                        channel.writer.write(msg)
+                        await channel.writer.drain()
+                        self._backpressure.lease(channel.id, buf_idx)
 
                     except (ConnectionResetError, BrokenPipeError):
                         logger.debug(
