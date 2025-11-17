@@ -140,13 +140,6 @@ class Marshal:
 
         try:
             yield obj
-            
-        except GeneratorExit:
-            # This happens when we need to close shm/clear cache 
-            # on shutdown and user code may have its fingers in 
-            # memory that we need to free
-            pass 
-
         finally:
             del obj
             for buf in buffers:
