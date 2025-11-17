@@ -160,7 +160,7 @@ class GraphContext:
         """
         Revert all changes made by this context.
         
-        This method closes all clients (publishers and subscribers) created by this
+        This method closes all publishers and subscribers created by this
         context and removes all edges that were added to the graph. It is
         automatically called when exiting the context manager.
         """

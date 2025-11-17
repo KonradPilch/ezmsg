@@ -336,17 +336,11 @@ class Channel:
             logger.debug(f"connection fail: channel:{self.id} - pub:{self.pub_id}")
 
         finally:
-            # await close_stream_writer(self._pub_writer)
-            self._pub_writer.close()
-
-            await self.backpressure.sync()
-            if self._local_backpressure is not None:
-                await self._local_backpressure.sync()
-
             self.cache.clear()
-
             if self.shm is not None:
                 self.shm.close()
+
+            await close_stream_writer(self._pub_writer)
 
             logger.debug(f"disconnected: channel:{self.id} -> pub:{self.pub_id}")
 
@@ -451,25 +445,7 @@ class ChannelManager:
     def __init__(self):
         default_address = Address.from_string(GRAPHSERVER_ADDR)
         self._registry = {default_address: dict()}
-        self._lock = asyncio.Lock()
 
-    async def get(
-        self,
-        pub_id: UUID,
-        graph_address: AddressType | None = None,
-        create: bool = False
-    ) -> Channel:
-        graph_address = _ensure_address(graph_address)
-        channel = self._registry.get(graph_address, dict()).get(pub_id, None)
-        if create and channel is None:
-            channel = await Channel.create(pub_id, graph_address)
-            channels = self._registry.get(graph_address, dict())
-            channels[pub_id] = channel
-            self._registry[graph_address] = channels
-        if channel is None:
-            raise KeyError(f"channel {pub_id=} {graph_address=} does not exist")
-        return channel
-    
     async def register(
         self,
         pub_id: UUID,
@@ -495,7 +471,14 @@ class ChannelManager:
         graph_address: AddressType | None = None,
         local_backpressure: Backpressure | None = None
     ) -> Channel:
-        channel = await self.get(pub_id, graph_address, create = True)
+        graph_address = _ensure_address(graph_address)
+        try:
+            channel = self._registry.get(graph_address, dict())[pub_id]
+        except KeyError:
+            channel = await Channel.create(pub_id, graph_address)
+            channels = self._registry.get(graph_address, dict())
+            channels[pub_id] = channel
+            self._registry[graph_address] = channels
         channel.register_client(client_id, queue, local_backpressure)
         return channel
 
@@ -505,15 +488,19 @@ class ChannelManager:
         client_id: UUID, 
         graph_address: AddressType | None = None
     ) -> None:
-        channel = await self.get(pub_id, graph_address, create = False)
+        graph_address = _ensure_address(graph_address)
+        channel = self._registry.get(graph_address, dict())[pub_id]
         channel.unregister_client(client_id)
 
+        logger.debug(f'unregistered {client_id} from {pub_id}; {len(channel.clients)} left')
+
         if len(channel.clients) == 0:
-            channel.close()
-            await channel.wait_closed()
-            graph_address = _ensure_address(graph_address)
             registry = self._registry[graph_address]
             del registry[pub_id]
+
+            channel.close()
+            await channel.wait_closed()
+
             logger.debug(f'closed channel {pub_id}: no clients')
 
 

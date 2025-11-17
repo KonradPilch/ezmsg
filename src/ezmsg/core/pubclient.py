@@ -442,6 +442,7 @@ class Publisher:
                                 pass
                         
                         self._shm.close()
+                        await self._shm.wait_closed()
                         self._shm = new_shm
 
                     with self._shm.buffer(buf_idx) as mem:

@@ -157,13 +157,11 @@ class SHMContext:
         :rtype: collections.abc.Generator[memoryview, None, None]
         :raises BufferError: If shared memory is no longer accessible.
         """
-        with self[idx] as mem:
-            if readonly:
-                ro_mem = mem.toreadonly()
-                yield ro_mem
-                ro_mem.release()
-            else:
-                yield mem
+        mem = self[idx].toreadonly() if readonly else self[idx]
+        try:
+            yield mem
+        finally:
+            mem.release()
 
     def close(self) -> None:
         """
@@ -247,6 +245,8 @@ class SHMInfo:
         async def _wait_for_eof() -> None:
             try:
                 await reader.read()
+            except (ConnectionResetError, BrokenPipeError):
+                pass
             finally:
                 await close_stream_writer(writer)
 
@@ -255,10 +255,9 @@ class SHMInfo:
         self.leases.add(lease)
         return lease
 
-
     def _release(self, task: "asyncio.Task[None]"):
-        self.leases.discard(task)
-        logger.debug(f"discarded lease from {self.shm.name}")
+        self.leases.remove(task)
+        logger.debug(f"removed lease from {self.shm.name}; {len(self.leases)} left")
         if len(self.leases) == 0:
             logger.debug(f"unlinking {self.shm.name}")
             self.shm.close()
