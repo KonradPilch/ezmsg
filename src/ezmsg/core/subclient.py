@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import AsyncGenerator
 import logging
 import typing
 
@@ -8,7 +7,8 @@ from contextlib import asynccontextmanager, suppress
 from copy import deepcopy
 
 from .graphserver import GraphService
-from .messagechannel import CHANNELS, NotificationQueue, Channel
+from .channelmanager import CHANNELS
+from .messagechannel import NotificationQueue, Channel
 
 from .netprotocol import (
     AddressType,

@@ -5,12 +5,13 @@ import time
 
 from uuid import UUID
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .backpressure import Backpressure
 from .shm import SHMContext
 from .graphserver import GraphService
-from .messagechannel import CHANNELS, Channel
+from .channelmanager import CHANNELS
+from .messagechannel import Channel
 from .messagemarshal import MessageMarshal, UninitializedMemory
 
 from .netprotocol import (
