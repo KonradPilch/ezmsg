@@ -256,8 +256,8 @@ class SHMInfo:
         return lease
 
     def _release(self, task: "asyncio.Task[None]"):
-        self.leases.remove(task)
-        logger.debug(f"removed lease from {self.shm.name}; {len(self.leases)} left")
+        self.leases.discard(task)
+        logger.debug(f"discarded lease from {self.shm.name}; {len(self.leases)} left")
         if len(self.leases) == 0:
             logger.debug(f"unlinking {self.shm.name}")
             self.shm.close()

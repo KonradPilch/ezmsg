@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import pickle
+import os
+import socket
+import threading
 from contextlib import suppress
 from uuid import UUID, uuid1
 
@@ -24,15 +27,17 @@ from .netprotocol import (
     GRAPHSERVER_ADDR_ENV,
     GRAPHSERVER_PORT_DEFAULT,
     DEFAULT_SHM_SIZE,
+    create_socket,
+    SERVER_PORT_START_ENV,
+    SERVER_PORT_START_DEFAULT,
+    DEFAULT_HOST,
 )
-from .server import ServiceManager, ThreadedAsyncServer
 from .shm import SHMContext, SHMInfo
-
 
 logger = logging.getLogger("ezmsg")
 
 
-class GraphServer(ThreadedAsyncServer):
+class GraphServer(threading.Thread):
     """
     Pub-sub directed acyclic graph (DAG) server.
     
@@ -46,6 +51,11 @@ class GraphServer(ThreadedAsyncServer):
        The GraphServer is typically managed automatically by the ezmsg runtime
        and doesn't need to be instantiated directly by user code.
     """
+    _server_up: threading.Event
+    _shutdown: threading.Event
+
+    _sock: socket.socket
+    _loop: asyncio.AbstractEventLoop
 
     graph: DAG
     clients: dict[UUID, ClientInfo]
@@ -54,29 +64,88 @@ class GraphServer(ThreadedAsyncServer):
     _client_tasks: dict[UUID, "asyncio.Task[None]"]
     _command_lock: asyncio.Lock
 
-    def __init__(self) -> None:
-        super().__init__(name = "GraphServer")
-        self.graph = DAG()
-        self.clients = dict()
-        self._client_tasks = dict()
-        self.shms = dict()
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**{**kwargs, **dict(daemon=True, name=kwargs.get("name", "GraphServer"))})
+        # threading events for lifecycle
+        self._server_up = threading.Event()
+        self._shutdown = threading.Event()
 
-    async def setup(self) -> None:
+        # graph/server data
+        self.graph = DAG()
+        self.clients = {}
+        self._client_tasks = {}
+        self.shms = {}
+
+    @property
+    def address(self) -> Address:
+        return Address(*self._sock.getsockname())
+
+    def start(self, address: AddressType | None = None) -> None:  # type: ignore[override]
+        if address is not None:
+            self._sock = create_socket(*address)
+        else:
+            start_port = int(os.environ.get(SERVER_PORT_START_ENV, SERVER_PORT_START_DEFAULT))
+            self._sock = create_socket(start_port=start_port)
+
+        self._loop = asyncio.new_event_loop()
+        super().start()
+        self._server_up.wait()
+
+    def stop(self) -> None:
+        self._shutdown.set()
+        self.join()
+
+    def run(self) -> None:
+        try:
+            asyncio.set_event_loop(self._loop)
+            with suppress(asyncio.CancelledError):
+                self._loop.run_until_complete(self._amain())
+        finally:
+            self._loop.stop()
+            self._loop.close()
+
+    async def _setup(self) -> None:
         self._command_lock = asyncio.Lock()
 
-    async def shutdown(self) -> None:
-        for task in self._client_tasks.values():
+    async def _shutdown_async(self) -> None:
+        # Cancel client handler tasks and wait for them to end.
+        for task in list(self._client_tasks.values()):
             task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+        with suppress(asyncio.CancelledError):
+            await asyncio.gather(*self._client_tasks.values(), return_exceptions=True)
         self._client_tasks.clear()
 
+        # Cancel SHM leases
         for info in self.shms.values():
             for lease_task in list(info.leases):
                 lease_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await lease_task
             info.leases.clear()
+
+    async def _amain(self) -> None:
+        """
+        Start the asyncio server and serve forever until shutdown is requested.
+        """
+        await self._setup()
+
+        server = await asyncio.start_server(self.api, sock=self._sock)
+
+        async def monitor_shutdown() -> None:
+            # Thread event -> wake in event loop
+            await self._loop.run_in_executor(None, self._shutdown.wait)
+            server.close()
+            await self._shutdown_async()
+            await server.wait_closed()
+
+        monitor_task = self._loop.create_task(monitor_shutdown())
+        self._server_up.set()
+
+        try:
+            await server.serve_forever()
+        finally:
+            self._shutdown.set()
+            await monitor_task
 
     async def api(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -107,7 +176,6 @@ class GraphServer(ThreadedAsyncServer):
                 shm_info: SHMInfo | None = None
 
                 if req == Command.SHM_CREATE.value:
-                    # TODO: UUID
                     num_buffers = await read_int(reader)
                     buf_size = await read_int(reader)
 
@@ -307,8 +375,10 @@ class GraphServer(ThreadedAsyncServer):
             logger.debug(f"Client {client_id} disconnected from GraphServer: {e}")
 
         finally:
+            # Ensure any waiter on this client unblocks
+            # with suppress(Exception):
             self.clients[client_id].set_sync()
-            del self.clients[client_id]
+            self.clients.pop(client_id, None)
             await close_stream_writer(writer)
 
     async def _notify_subscriber(self, sub: SubscriberInfo) -> None:
@@ -351,17 +421,56 @@ class GraphServer(ThreadedAsyncServer):
         return [sub for sub in self._subscribers() if sub.topic in downstream_topics]
 
 
-class GraphService(ServiceManager[GraphServer]):
+class GraphService:
     ADDR_ENV = GRAPHSERVER_ADDR_ENV
     PORT_DEFAULT = GRAPHSERVER_PORT_DEFAULT
 
+    _address: Address | None
+
     def __init__(self, address: AddressType | None = None) -> None:
-        super().__init__(GraphServer, address)
+        self._address = Address(*address) if address is not None else None
+
+    @classmethod
+    def default_address(cls) -> Address:
+        address_str = os.environ.get(cls.ADDR_ENV, f"{DEFAULT_HOST}:{cls.PORT_DEFAULT}")
+        return Address.from_string(address_str)
+
+    @property
+    def address(self) -> Address:
+        return self._address if self._address is not None else self.default_address()
+
+    def create_server(self) -> GraphServer:
+        server = GraphServer(name="GraphServer")
+        server.start(self._address)
+        self._address = server.address
+        return server
+
+    async def ensure(self) -> GraphServer | None:
+        """
+        Try connecting to an existing server. If none is listening and no explicit
+        address/environment is set, start one and return it. If an existing one is
+        found, return None.
+        """
+        server = None
+        ensure_server = False
+        if self._address is None:
+            # Only auto-start if env var not forcing a location
+            ensure_server = self.ADDR_ENV not in os.environ
+
+        try:
+            reader, writer = await self.open_connection()
+            await close_stream_writer(writer)
+        except OSError as ref_e:
+            if not ensure_server:
+                raise ref_e
+            server = self.create_server()
+
+        return server
 
     async def open_connection(
         self,
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        reader, writer = await super().open_connection()
+        reader, writer = await asyncio.open_connection(*(self.address))
         server_version = await read_str(reader)
         if server_version != __version__:
             logger.warning(
@@ -377,6 +486,7 @@ class GraphService(ServiceManager[GraphServer]):
         await writer.drain()
         response = await reader.read(1)
         if response == Command.CYCLIC.value:
+            await close_stream_writer(writer)
             raise CyclicException
         await close_stream_writer(writer)
 
@@ -464,19 +574,18 @@ class GraphService(ServiceManager[GraphServer]):
 
     async def create_shm(
         self,
-        # TODO: add UUID parameter 
-        num_buffers: int, 
-        buf_size: int = DEFAULT_SHM_SIZE
+        num_buffers: int,
+        buf_size: int = DEFAULT_SHM_SIZE,
     ) -> SHMContext:
         reader, writer = await self.open_connection()
         writer.write(Command.SHM_CREATE.value)
-        # TODO: serialize UUID
         writer.write(uint64_to_bytes(num_buffers))
         writer.write(uint64_to_bytes(buf_size))
         await writer.drain()
 
         response = await reader.read(1)
         if response != Command.COMPLETE.value:
+            await close_stream_writer(writer)
             raise ValueError("Error creating SHM segment")
 
         shm_name = await read_str(reader)
@@ -490,6 +599,7 @@ class GraphService(ServiceManager[GraphServer]):
 
         response = await reader.read(1)
         if response != Command.COMPLETE.value:
+            await close_stream_writer(writer)
             raise ValueError("Invalid SHM Name")
 
         shm_name = await read_str(reader)
