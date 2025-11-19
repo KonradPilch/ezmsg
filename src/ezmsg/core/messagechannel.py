@@ -29,7 +29,16 @@ NotificationQueue = asyncio.Queue[typing.Tuple[UUID, int]]
 
 
 class Channel:
-    """cache-backed message channel for a particular publisher"""
+    """
+    Channel is a "middle-man" that receives messages from a particular Publisher,
+    maintains the message in a MessageCache, and pushes notifications to interested
+    Subscribers in this process.
+    
+    Channel primarily exists to reduce redundant message serialization and telemetry.
+
+    .. note::
+    The Channel constructor should not be called directly, instead use Channel.create(...)
+    """
 
     id: UUID
     pub_id: UUID
@@ -73,6 +82,18 @@ class Channel:
         pub_id: UUID,
         graph_address: AddressType,
     ) -> "Channel":
+        """
+        Create a channel for a particular Publisher managed by a GraphServer at graph_address
+
+        :param pub_id: The Publisher's UUID on the GraphServer
+        :type pub_id: UUID
+        :param graph_address: The address the GraphServer is hosted on.
+        :type graph_address: AddressType
+        :return: a configured and connected Channel for messages from the Publisher
+        :rtype: Channel
+
+        .. note:: This is typically called by ChannelManager as interested Subscribers register.
+        """
         graph_service = GraphService(graph_address)
 
         graph_reader, graph_writer = await graph_service.open_connection()
@@ -129,10 +150,16 @@ class Channel:
         return chan
     
     def close(self) -> None:
+        """
+        Mark the Channel for shutdown and resource deallocation
+        """
         self._pub_task.cancel()
         self._graph_task.cancel()
 
     async def wait_closed(self) -> None:
+        """
+        Wait until the Channel has properly shutdown and its resources have been deallocated.
+        """
         with suppress(asyncio.CancelledError):
             await self._pub_task
         with suppress(asyncio.CancelledError):
@@ -143,6 +170,9 @@ class Channel:
     async def _graph_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        """
+        The task that handles communication between the GraphServer and the Publisher.
+        """
         try:
             while True:
                 cmd = await reader.read(1)
@@ -161,6 +191,9 @@ class Channel:
             await close_stream_writer(writer)
 
     async def _publisher_connection(self, reader: asyncio.StreamReader) -> None:
+        """
+        The task that handles communication between the Channel and the Publisher it receives messages from.
+        """
         try:
             while True:
                 msg = await reader.read(1)
@@ -233,8 +266,8 @@ class Channel:
 
     def put_local(self, msg_id: int, msg: typing.Any) -> None:
         """
-        put an object into cache (should only be used by Publishers)
-        returns true if any clients were notified
+        Put a message DIRECTLY into cache and notify all clients.
+        .. note:: This command should ONLY be used by Publishers that are in the same process as this Channel.
         """
         if self._local_backpressure is None:
             raise ValueError('cannot put_local without access to publisher backpressure (is publisher in same process?)')
@@ -247,13 +280,15 @@ class Channel:
     @contextmanager
     def get(self, msg_id: int, client_id: UUID) -> typing.Generator[typing.Any, None, None]:
         """
-        Get a message
+        Get a message via a ContextManager
         
         :param msg_id: Message ID to retreive
         :type msg_id: int
         :param client_id: UUID of client retreiving this message for backpressure purposes
         :type client_id: UUID
         :raises CacheMiss: If this msg_id does not exist in the cache.
+        :return: A ContextManager for the message (type: Any)
+        :rtype: Generator[Any]
         """
         
         try:
@@ -283,11 +318,27 @@ class Channel:
         queue: NotificationQueue | None = None, 
         local_backpressure: Backpressure | None = None,
     ) -> None:
+        """
+        Register an interested client and provide a queue for incoming message notifications.
+
+        :param client_id: The UUID of the subscribing client
+        :type client_id: UUID
+        :param queue: The notification queue for the subscribing client
+        :type queue: asyncio.Queue[tuple[UUID, int]] | None
+        :param local_backpressure: The backpressure object for the Publisher if it is in the same process
+        :type local_backpressure: Backpressure 
+        """
         self.clients[client_id] = queue
         if client_id == self.pub_id:
             self._local_backpressure = local_backpressure 
 
     def unregister_client(self, client_id: UUID) -> None:
+        """
+        Unregister a subscribed client
+
+        :param client_id: The UUID of the subscribing client
+        :type client_id: UUID
+        """
         queue = self.clients[client_id]
 
         # queue is only 'None' if this client is a local publisher
