@@ -18,10 +18,11 @@ else:
 class SettingsMeta(ABCMeta):
     """
     Metaclass that automatically applies dataclass decorator to Settings classes.
-    
+
     This metaclass ensures all Settings subclasses are automatically converted
     to frozen dataclasses, providing immutability and proper initialization.
     """
+
     def __new__(
         cls,
         name: str,
@@ -31,7 +32,7 @@ class SettingsMeta(ABCMeta):
     ) -> type["Settings"]:
         """
         Create a new Settings class with dataclass transformation.
-        
+
         :param name: Name of the class being created.
         :type name: str
         :param bases: Base classes for the new class.

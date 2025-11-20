@@ -7,10 +7,11 @@ from typing import Any
 class StateMeta(ABCMeta):
     """
     Metaclass that automatically applies dataclass decorator to State classes.
-    
+
     This metaclass ensures all State subclasses are automatically converted
     to mutable dataclasses with hash support but no automatic initialization.
     """
+
     def __new__(
         cls,
         name: str,
@@ -20,7 +21,7 @@ class StateMeta(ABCMeta):
     ) -> type["State"]:
         """
         Create a new State class with dataclass transformation.
-        
+
         :param name: Name of the class being created.
         :type name: str
         :param bases: Base classes for the new class.

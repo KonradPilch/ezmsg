@@ -25,11 +25,12 @@ logger = logging.getLogger("ezmsg")
 class Subscriber:
     """
     A subscriber client for receiving messages from publishers.
-    
+
     Subscriber manages connections to multiple publishers, handles different
     transport methods (local, shared memory, TCP), and provides both copying
     and zero-copy message access patterns with automatic acknowledgment.
     """
+
     id: UUID
     topic: str
 
@@ -50,14 +51,11 @@ class Subscriber:
 
     @classmethod
     async def create(
-        cls, 
-        topic: str, 
-        graph_address: AddressType | None, 
-        **kwargs
+        cls, topic: str, graph_address: AddressType | None, **kwargs
     ) -> "Subscriber":
         """
         Create a new Subscriber instance and register it with the graph server.
-        
+
         :param topic: The topic this subscriber will listen to.
         :type topic: str
         :param graph_service: Service for graph server communication.
@@ -73,12 +71,12 @@ class Subscriber:
         writer.write(encode_str(topic))
         sub_id_str = await read_str(reader)
         sub_id = UUID(sub_id_str)
-        
+
         sub = cls(sub_id, topic, graph_address, **kwargs)
 
         sub._graph_task = asyncio.create_task(
             sub._graph_connection(reader, writer),
-            name = f'sub-{sub.id}: _graph_connection'
+            name=f"sub-{sub.id}: _graph_connection",
         )
 
         # FIXME: We need to wait for _graph_task to service an UPDATE
@@ -86,16 +84,12 @@ class Subscriber:
         # subscriber ready for recv.
         await sub._initialized.wait()
 
-        logger.debug(f'created sub {sub.id=} {topic=}')
+        logger.debug(f"created sub {sub.id=} {topic=}")
 
         return sub
 
     def __init__(
-        self, 
-        id: UUID, 
-        topic: str, 
-        graph_address: AddressType | None,
-        **kwargs
+        self, id: UUID, topic: str, graph_address: AddressType | None, **kwargs
     ) -> None:
         """
         Initialize a Subscriber instance.
@@ -122,7 +116,7 @@ class Subscriber:
     def close(self) -> None:
         """
         Close the subscriber and cancel all associated tasks.
-        
+
         Cancels graph connection, all publisher connection tasks,
         and closes all shared memory contexts.
         """
@@ -131,7 +125,7 @@ class Subscriber:
     async def wait_closed(self) -> None:
         """
         Wait for all subscriber resources to be fully closed.
-        
+
         Waits for graph connection termination, all publisher connection
         tasks to complete, and all shared memory contexts to close.
         """
@@ -143,10 +137,10 @@ class Subscriber:
     ) -> None:
         """
         Handle communication with the graph server.
-        
+
         Processes commands from the graph server including COMPLETE and UPDATE
         operations for managing publisher connections.
-        
+
         :param reader: Stream reader for receiving commands from graph server.
         :type reader: asyncio.StreamReader
         :param writer: Stream writer for responding to graph server.
@@ -172,23 +166,27 @@ class Subscriber:
                     # event, which we wait on in Subscriber.create, releasing the
                     # block and returning a fully connected/ready subscriber.
                     # While this currently works, its non-obvious what this
-                    # accomplishes and why its implemented this way.  I just 
+                    # accomplishes and why its implemented this way.  I just
                     # wasted 2 hours removing this seemingly un-necessary event
-                    # to introduce a bug that is only resolved by reintroducing 
+                    # to introduce a bug that is only resolved by reintroducing
                     # the event.  Some thought should be put into replacing the
                     # bespoke communication protocol with something a bit more
                     # standard (JSON RPC?) with a more common/logical pattern
-                    # for creating/handling comms.  We will probably want to 
+                    # for creating/handling comms.  We will probably want to
                     # keep the bespoke comms for the publisher->channel link
                     # as that is in the hot path.
                     self._initialized.set()
 
                 elif cmd == Command.UPDATE.value:
                     update = await read_str(reader)
-                    pub_ids = set([UUID(id) for id in update.split(',')]) if update else set()
+                    pub_ids = (
+                        set([UUID(id) for id in update.split(",")]) if update else set()
+                    )
 
                     for pub_id in set(pub_ids - self._cur_pubs):
-                        channel = await CHANNELS.register(pub_id, self.id, self._incoming, self._graph_address)
+                        channel = await CHANNELS.register(
+                            pub_id, self.id, self._incoming, self._graph_address
+                        )
                         self._channels[pub_id] = channel
 
                     for pub_id in set(self._cur_pubs - pub_ids):
@@ -204,7 +202,9 @@ class Subscriber:
                     )
 
         except (ConnectionResetError, BrokenPipeError):
-            logger.debug(f"Subscriber {self.topic}({self.id}) lost connection to graph server")
+            logger.debug(
+                f"Subscriber {self.topic}({self.id}) lost connection to graph server"
+            )
 
         finally:
             for pub_id in self._channels:
@@ -214,10 +214,10 @@ class Subscriber:
     async def recv(self) -> typing.Any:
         """
         Receive the next message with a deep copy.
-        
+
         This method creates a deep copy of the received message, allowing
         safe modification without affecting the original cached message.
-        
+
         :return: Deep copy of the received message.
         :rtype: typing.Any
         """
@@ -230,11 +230,11 @@ class Subscriber:
     async def recv_zero_copy(self) -> typing.AsyncGenerator[typing.Any, None]:
         """
         Receive the next message with zero-copy access.
-        
+
         This context manager provides direct access to the cached message
         without copying. The message should not be modified or stored beyond
         the context manager's scope.
-        
+
         :return: Context manager yielding the received message.
         :rtype: collections.abc.AsyncGenerator[typing.Any, None]
         """
@@ -242,5 +242,3 @@ class Subscriber:
 
         with self._channels[pub_id].get(msg_id, self.id) as msg:
             yield msg
-
-  

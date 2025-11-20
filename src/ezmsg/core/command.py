@@ -5,7 +5,6 @@ import json
 import logging
 import subprocess
 import sys
-import typing
 import webbrowser
 import zlib
 
@@ -25,7 +24,7 @@ logger = logging.getLogger("ezmsg")
 def cmdline() -> None:
     """
     Command-line interface for ezmsg core server management.
-    
+
     Provides commands for starting, stopping, and managing ezmsg server
     processes including GraphServer and SHMServer, as well as utilities
     for graph visualization.
@@ -107,7 +106,7 @@ async def run_command(
 ) -> None:
     """
     Run an ezmsg command with the specified parameters.
-    
+
     This function handles various ezmsg commands like 'serve', 'start', 'shutdown', etc.
     and manages the graph and shared memory services.
 
@@ -184,7 +183,7 @@ async def run_command(
 def mm(graph: str, target="live") -> str:
     """
     Generate a Mermaid visualization URL for the given graph.
-    
+
     :param graph: Graph representation string to visualize.
     :type graph: str
     :param target: Target platform ('live' or 'ink').

@@ -57,7 +57,6 @@ class ExecutionContext:
         graph_address: AddressType | None,
         backend_process: type[BackendProcess] = DefaultBackendProcess,
     ) -> None:
-        
         self._processes = [
             backend_process(
                 process_units,
@@ -145,7 +144,7 @@ class ExecutionContext:
 
         if not processes:
             return None
-        
+
         return cls(
             processes,
             graph_connections,
@@ -160,8 +159,8 @@ def run_system(
 ) -> None:
     """
     Deprecated function for running a system (Collection).
-    
-    .. deprecated:: 
+
+    .. deprecated::
        Use :func:`run` instead to run any component (unit, collection).
 
     :param system: The collection to run
@@ -192,9 +191,9 @@ def run(
 
     This is the main entry point for running ezmsg applications. It sets up the
     execution environment, initializes components, and manages the message-passing
-    infrastructure. 
+    infrastructure.
 
-    On initialization, ezmsg will call ``initialize()`` for each :obj:`Unit` and 
+    On initialization, ezmsg will call ``initialize()`` for each :obj:`Unit` and
     ``configure()`` for each :obj:`Collection`, if defined. On initialization, ezmsg
     will create a directed acyclic graph using the contents of ``connections``.
 
@@ -218,9 +217,9 @@ def run(
     :param components_kwargs: Additional components specified as keyword arguments
     :type components_kwargs: Component
 
-    .. note:: 
+    .. note::
        Since jupyter notebooks run in a single process, you must set `force_single_process=True`.
-    
+
     .. note::
        The old method :obj:`run_system` has been deprecated and uses ``run()`` instead.
     """
@@ -264,13 +263,12 @@ def run(
             address = graph_context.graph_address
             if address is None:
                 address = GraphService.default_address()
-            logger.info(f'Connected to GraphServer @ {address}')
+            logger.info(f"Connected to GraphServer @ {address}")
         else:
-            logger.info(f'Spawned GraphServer @ {graph_context.graph_address}')
+            logger.info(f"Spawned GraphServer @ {graph_context.graph_address}")
 
         execution_context.create_processes(
-            graph_address=graph_context.graph_address,
-            backend_process=backend_process
+            graph_address=graph_context.graph_address, backend_process=backend_process
         )
 
         async def cleanup_graph() -> None:

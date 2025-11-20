@@ -10,6 +10,7 @@ This module provides JSON serialization support for complex objects including:
 The MessageEncoder and MessageDecoder classes handle automatic conversion
 between Python objects and JSON representations suitable for file logging.
 """
+
 from collections.abc import Iterable, Generator
 import json
 import pickle
@@ -44,7 +45,7 @@ class LogStart: ...
 def type_str(obj: typing.Any) -> str:
     """
     Get a string representation of an object's type for serialization.
-    
+
     :param obj: Object to get type string for
     :type obj: typing.Any
     :return: String representation in format 'module:qualname'
@@ -58,7 +59,7 @@ def type_str(obj: typing.Any) -> str:
 def import_type(typestr: str) -> type:
     """
     Import a type from a string representation.
-    
+
     :param typestr: String representation in format 'module:qualname'
     :type typestr: str
     :return: The imported type
@@ -78,13 +79,14 @@ def import_type(typestr: str) -> type:
 class MessageEncoder(json.JSONEncoder):
     """
     JSON encoder for ezmsg messages with support for dataclasses, numpy arrays, and arbitrary objects.
-    
+
     This encoder extends the standard JSON encoder to handle:
-    
+
     - Dataclass objects (serialized as dictionaries with type information)
     - NumPy arrays (serialized as base64-encoded data with metadata)
     - Other objects via pickle (as fallback)
     """
+
     def default(self, o: typing.Any):
         if is_dataclass(o):
             return {
@@ -116,12 +118,13 @@ class MessageEncoder(json.JSONEncoder):
 class StampedMessage(typing.NamedTuple):
     """
     A message with an associated timestamp.
-    
+
     :param msg: The message object
     :type msg: typing.Any
     :param timestamp: Optional timestamp for the message
     :type timestamp: float | None
     """
+
     msg: typing.Any
     timestamp: float | None
 
@@ -129,10 +132,10 @@ class StampedMessage(typing.NamedTuple):
 def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
     """
     JSON object hook for decoding ezmsg messages.
-    
+
     Handles reconstruction of dataclasses, numpy arrays, and pickled objects
     from their JSON representations.
-    
+
     :param obj: Dictionary from JSON decoder
     :type obj: dict[str, typing.Any]
     :return: Reconstructed object
@@ -145,9 +148,7 @@ def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
     if obj_type is not None:
         if np and obj_type == NDARRAY_TYPE:
             data_bytes: str | None = obj.get(NDARRAY_DATA)
-            data_shape: Iterable[int] | None = obj.get(
-                NDARRAY_SHAPE
-            )
+            data_shape: Iterable[int] | None = obj.get(NDARRAY_SHAPE)
             data_dtype: npt.DTypeLike | None = obj.get(NDARRAY_DTYPE)
 
             if (
@@ -175,14 +176,13 @@ def _object_hook(obj: dict[str, typing.Any]) -> typing.Any:
 class MessageDecoder(json.JSONDecoder):
     """
     JSON decoder for ezmsg messages.
-    
+
     Automatically reconstructs dataclasses, numpy arrays, and pickled objects
     from their JSON representations using the _object_hook function.
     """
+
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=_object_hook, *args, **kwargs)
-
-
 
 
 def message_log(
@@ -190,7 +190,7 @@ def message_log(
 ) -> Generator[typing.Any, None, None]:
     """
     Generator function to read messages from a log file created by MessageLogger.
-    
+
     :param fname: Path to the log file
     :type fname: Path
     :param return_object: If True, yield only the message objects; if False, yield complete log entries

@@ -14,7 +14,6 @@ class CacheEntry(typing.NamedTuple):
 
 
 class MessageCache:
-
     _cache: list[CacheEntry | None]
 
     def __init__(self, num_buffers: int) -> None:
@@ -26,7 +25,7 @@ class MessageCache:
     def __getitem__(self, msg_id: int) -> typing.Any:
         """
         Get a cached object by msg_id
-        
+
         :param msg_id: Message ID to retreive from cache
         :type msg_id: int
         :raises CacheMiss: If this msg_id does not exist in the cache.
@@ -35,17 +34,17 @@ class MessageCache:
         if entry is None or entry.msg_id != msg_id:
             raise CacheMiss
         return entry.object
-    
+
     def keys(self) -> list[int]:
         """
         Get a list of current cached msg_ids
         """
         return [entry.msg_id for entry in self._cache if entry is not None]
-    
+
     def put_local(self, obj: typing.Any, msg_id: int) -> None:
         """
         Put an object with associated msg_id directly into cache
-        
+
         :param obj: Object to put in cache.
         :type obj: typing.Any
         :param msg_id: ID associated with this message/object.
@@ -53,10 +52,10 @@ class MessageCache:
         """
         self._put(
             CacheEntry(
-                object = obj,
-                msg_id = msg_id,
-                context = None,
-                memory = None,
+                object=obj,
+                msg_id=msg_id,
+                context=None,
+                memory=None,
             )
         )
 
@@ -66,7 +65,7 @@ class MessageCache:
         overwriting the existing slot in cache.
         This method passes the lifecycle of the memoryview to the MessageCache
         and the memoryview will be properly released by the cache with `free`
-        
+
         :param mem: Source memoryview containing serialized object.
         :type from_mem: memoryview
         :raises UninitializedMemory: If mem buffer is not properly initialized.
@@ -74,10 +73,10 @@ class MessageCache:
         ctx = MessageMarshal.obj_from_mem(mem)
         self._put(
             CacheEntry(
-                object = ctx.__enter__(),
-                msg_id = MessageMarshal.msg_id(mem),
-                context = ctx,
-                memory = mem,
+                object=ctx.__enter__(),
+                msg_id=MessageMarshal.msg_id(mem),
+                context=ctx,
+                memory=mem,
             )
         )
 
@@ -97,11 +96,11 @@ class MessageCache:
             self._cache[buf_idx] = None
             if mem is not None:
                 mem.release()
-        
+
     def release(self, msg_id: int) -> None:
         """
         Release memory for the entry associated with msg_id
-        
+
         :param mem: Source memoryview containing serialized object.
         :type from_mem: memoryview
         :raises UninitializedMemory: If mem buffer is not properly initialized.
@@ -115,7 +114,7 @@ class MessageCache:
     def clear(self) -> None:
         """
         Release all cached objects
-        
+
         :param mem: Source memoryview containing serialized object.
         :type from_mem: memoryview
         :raises UninitializedMemory: If mem buffer is not properly initialized.

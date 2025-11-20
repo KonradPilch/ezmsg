@@ -40,7 +40,7 @@ logger = logging.getLogger("ezmsg")
 class GraphServer(threading.Thread):
     """
     Pub-sub directed acyclic graph (DAG) server.
-    
+
     The GraphServer manages the message routing graph for ezmsg applications,
     handling publisher-subscriber relationships and maintaining the DAG structure.
 
@@ -51,6 +51,7 @@ class GraphServer(threading.Thread):
        The GraphServer is typically managed automatically by the ezmsg runtime
        and doesn't need to be instantiated directly by user code.
     """
+
     _server_up: threading.Event
     _shutdown: threading.Event
 
@@ -65,7 +66,9 @@ class GraphServer(threading.Thread):
     _command_lock: asyncio.Lock
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(**{**kwargs, **dict(daemon=True, name=kwargs.get("name", "GraphServer"))})
+        super().__init__(
+            **{**kwargs, **dict(daemon=True, name=kwargs.get("name", "GraphServer"))}
+        )
         # threading events for lifecycle
         self._server_up = threading.Event()
         self._shutdown = threading.Event()
@@ -84,7 +87,9 @@ class GraphServer(threading.Thread):
         if address is not None:
             self._sock = create_socket(*address)
         else:
-            start_port = int(os.environ.get(SERVER_PORT_START_ENV, SERVER_PORT_START_DEFAULT))
+            start_port = int(
+                os.environ.get(SERVER_PORT_START_ENV, SERVER_PORT_START_DEFAULT)
+            )
             self._sock = create_socket(start_port=start_port)
 
         self._loop = asyncio.new_event_loop()
@@ -159,7 +164,7 @@ class GraphServer(threading.Thread):
             await writer.drain()
 
             req = await reader.read(1)
-            
+
             if not req:
                 # Empty bytes object means EOF; Client disconnected
                 # This happens frequently when future clients are just pinging
@@ -179,7 +184,7 @@ class GraphServer(threading.Thread):
                     num_buffers = await read_int(reader)
                     buf_size = await read_int(reader)
 
-                    # Create segment 
+                    # Create segment
                     shm_info = SHMInfo.create(num_buffers, buf_size)
                     self.shms[shm_info.shm.name] = shm_info
                     logger.debug(f"created {shm_info.shm.name}")
@@ -197,7 +202,7 @@ class GraphServer(threading.Thread):
 
                 # NOTE: SHMContexts are like GraphClients in that their
                 # lifetime is bound to the lifetime of this connection
-                # but rather than the early return that we have with 
+                # but rather than the early return that we have with
                 # GraphClients, we just await the lease task.
                 # This may be a more readable pattern?
                 # NOTE: With the current shutdown pattern, we cancel
@@ -218,20 +223,22 @@ class GraphServer(threading.Thread):
                         # Advertise an address the channel should be able to resolve
                         port = pub_info.address.port
                         iface = pub_info.writer.transport.get_extra_info("peername")[0]
-                        pub_addr = Address(iface, port) 
+                        pub_addr = Address(iface, port)
                     else:
                         logger.warning(f"Connecting channel requested {type(pub_info)}")
 
                 except KeyError:
-                    logger.warning(f"Connecting channel requested non-existent publisher {pub_id=}")
+                    logger.warning(
+                        f"Connecting channel requested non-existent publisher {pub_id=}"
+                    )
 
                 if pub_addr is None:
                     # FIXME: Channel should not be created; but it feels like we should
-                    # have a better communication protocol to tell the channel what the 
+                    # have a better communication protocol to tell the channel what the
                     # error was and deliver a better experience from the client side.
                     # for now, drop connection
                     await close_stream_writer(writer)
-                    return 
+                    return
 
                 writer.write(Command.COMPLETE.value)
                 writer.write(encode_str(str(channel_id)))
@@ -243,7 +250,7 @@ class GraphServer(threading.Thread):
                     self._handle_client(channel_id, reader, writer)
                 )
 
-                # NOTE: Created a client, must return early 
+                # NOTE: Created a client, must return early
                 # to avoid closing writer
                 return
 
@@ -251,8 +258,8 @@ class GraphServer(threading.Thread):
                 # We only want to handle one command at a time
                 async with self._command_lock:
                     if req in [
-                        Command.SUBSCRIBE.value, 
-                        Command.PUBLISH.value, 
+                        Command.SUBSCRIBE.value,
+                        Command.PUBLISH.value,
                     ]:
                         client_id = uuid1()
                         topic = await read_str(reader)
@@ -281,7 +288,7 @@ class GraphServer(threading.Thread):
 
                         writer.write(Command.COMPLETE.value)
 
-                        # NOTE: Created a client, must return early 
+                        # NOTE: Created a client, must return early
                         # to avoid closing writer
                         return
 
@@ -338,26 +345,29 @@ class GraphServer(threading.Thread):
             logger.debug("GraphServer connection fail mid-command")
 
         # NOTE: This prevents code repetition for many graph server commands, but
-        # when we create GraphClients, their lifecycle is bound to the lifecycle of 
-        # this connection.  We do NOT want to close the stream writer if we have 
+        # when we create GraphClients, their lifecycle is bound to the lifecycle of
+        # this connection.  We do NOT want to close the stream writer if we have
         # created a GraphClient, which requires an early return.  Perhaps a different
         # communication protocol could resolve this
         await close_stream_writer(writer)
 
     async def _handle_client(
-        self, client_id: UUID, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self,
+        client_id: UUID,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
-        """ 
+        """
         The lifecycle of a graph client is tied to the lifecycle of this TCP connection.
         We always attempt to read from the reader, and if the connection is ever closed
         from the other side, reader.read(1) returns empty, we break the loop, and delete
-        the client from our list of connected clients.  Because we're always reading 
+        the client from our list of connected clients.  Because we're always reading
         from the client within this task, we have to handle all client responses within
-        this task.  
-        
+        this task.
+
         NOTE: _notify_subscriber requires a COMPLETE once the subscriber has reconfigured
         its connections.  ClientInfo.sync_writer gives us the mechanism by which to block
-        _notify_subscriber until the COMPLETE is received in this context.  
+        _notify_subscriber until the COMPLETE is received in this context.
         """
         logger.debug(f"Graph Server: Client connected: {client_id}")
 
@@ -391,7 +401,7 @@ class GraphServer(threading.Thread):
                 notify_str = ",".join(pub_ids)
                 writer.write(Command.UPDATE.value)
                 writer.write(encode_str(notify_str))
-                
+
         except (ConnectionResetError, BrokenPipeError) as e:
             logger.debug(f"Failed to update Subscriber {sub.id}: {e}")
 
@@ -404,11 +414,9 @@ class GraphServer(threading.Thread):
         return [
             info for info in self.clients.values() if isinstance(info, SubscriberInfo)
         ]
-    
+
     def _channels(self) -> list[ChannelInfo]:
-        return [
-            info for info in self.clients.values() if isinstance(info, ChannelInfo)
-        ]
+        return [info for info in self.clients.values() if isinstance(info, ChannelInfo)]
 
     def _upstream_pubs(self, topic: str) -> list[PublisherInfo]:
         """Given a topic, return a set of all publisher IDs upstream of that topic"""

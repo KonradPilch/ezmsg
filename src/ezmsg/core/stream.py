@@ -7,7 +7,7 @@ from .addressable import Addressable
 class Stream(Addressable):
     """
     Base class for all streams in the ezmsg framework.
-    
+
     Streams define the communication channels between components, carrying
     messages of a specific type through the system.
 
@@ -29,7 +29,7 @@ class Stream(Addressable):
 class InputStream(Stream):
     """
     Can be added to any Component as a member variable. Methods may subscribe to it.
-    
+
     InputStream represents a channel that receives messages from other components.
     Units can subscribe to InputStreams to process incoming messages.
 
@@ -44,7 +44,7 @@ class InputStream(Stream):
 class OutputStream(Stream):
     """
     Can be added to any Component as a member variable. Methods may publish to it.
-    
+
     OutputStream represents a channel that sends messages to other components.
     Units can publish to OutputStreams to send messages through the system.
 

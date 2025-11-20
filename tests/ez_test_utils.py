@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import tempfile
-import typing
 
 import ezmsg.core as ez
 
@@ -24,7 +23,9 @@ def get_test_fn(test_name: str | None = None, extension: str = "txt") -> Path:
     # full test suite in parallel or when other tests use the same test name.
     # Use NamedTemporaryFile with delete=False so callers can open/remove it.
     prefix = f"{test_name}-" if test_name else "test-"
-    tmp = tempfile.NamedTemporaryFile(prefix=prefix, suffix=f".{extension}", delete=False)
+    tmp = tempfile.NamedTemporaryFile(
+        prefix=prefix, suffix=f".{extension}", delete=False
+    )
     tmp.close()
     return Path(tmp.name)
 

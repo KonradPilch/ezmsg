@@ -9,9 +9,7 @@ from .settings import Settings
 
 
 # Iterable of (output_stream, input_stream) pairs defining the network connections
-NetworkDefinition = Iterable[
-    tuple[Stream | str, Stream | str]
-]
+NetworkDefinition = Iterable[tuple[Stream | str, Stream | str]]
 
 
 class CollectionMeta(ComponentMeta):
@@ -41,7 +39,7 @@ class CollectionMeta(ComponentMeta):
 class Collection(Component, metaclass=CollectionMeta):
     """
     Connects :obj:`Units <Unit>` together by defining a graph which connects OutputStreams to InputStreams.
-    
+
     Collections are composite components that contain and coordinate multiple Units,
     defining how they communicate through stream connections.
 
@@ -59,8 +57,8 @@ class Collection(Component, metaclass=CollectionMeta):
     def configure(self) -> None:
         """
         A lifecycle hook that runs when the Collection is instantiated.
-        
-        This is the best place to call ``Unit.apply_settings()`` on each member 
+
+        This is the best place to call ``Unit.apply_settings()`` on each member
         Unit of the Collection. Override this method to perform collection-specific
         configuration of child components.
         """
@@ -68,9 +66,9 @@ class Collection(Component, metaclass=CollectionMeta):
 
     def network(self) -> NetworkDefinition:
         """
-        Override this method and have the definition return a NetworkDefinition 
+        Override this method and have the definition return a NetworkDefinition
         which defines how InputStreams and OutputStreams from member Units will be connected.
-        
+
         The NetworkDefinition specifies the message routing between components by
         connecting output streams to input streams.
 
@@ -81,10 +79,10 @@ class Collection(Component, metaclass=CollectionMeta):
 
     def process_components(self) -> AbstractCollection[Component]:
         """
-        Override this method and have the definition return a tuple which contains 
+        Override this method and have the definition return a tuple which contains
         Units and Collections which should run in their own processes.
 
-        This method allows you to specify which components should be isolated 
+        This method allows you to specify which components should be isolated
         in separate processes for performance or isolation requirements.
 
         :return: Collection of components that should run in separate processes

@@ -30,7 +30,7 @@ class Rate(object):
     def _remaining(self, curr_time: float) -> float:
         """
         Calculate the time remaining for rate to sleep.
-        
+
         :param curr_time: Current time
         :type curr_time: float
         :return: Time remaining in seconds
@@ -47,7 +47,7 @@ class Rate(object):
     def remaining(self) -> float:
         """
         Return the time remaining for rate to sleep.
-        
+
         :return: Time remaining in seconds
         :rtype: float
         """
@@ -57,7 +57,7 @@ class Rate(object):
     def _sleep_logic(self) -> float:
         """
         Internal method to calculate sleep time and update timing state.
-        
+
         :return: Time to sleep in seconds (non-negative)
         :rtype: float
         """

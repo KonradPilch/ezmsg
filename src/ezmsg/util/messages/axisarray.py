@@ -12,7 +12,6 @@ import ezmsg.core as ez
 try:
     import numpy as np
     import numpy.typing as npt
-    import numpy.lib.stride_tricks as nps
 except ModuleNotFoundError:
     ez.logger.error(
         'Install ezmsg with the AxisArray extra:pip install "ezmsg[AxisArray]"'
@@ -36,6 +35,7 @@ if typing.TYPE_CHECKING:
 @dataclass
 class AxisBase(ABC):
     """Abstract base class for axes types used by AxisArray."""
+
     unit: str = ""
 
     @typing.overload
@@ -50,13 +50,13 @@ class AxisBase(ABC):
 @dataclass
 class LinearAxis(AxisBase):
     """
-    An axis implementation for sparse axes with regular intervals between elements. 
-    
+    An axis implementation for sparse axes with regular intervals between elements.
+
     It is called "linear" because it provides a simple linear mapping between
     indices and element values: value = (index * gain) + offset.
 
-    A typical example is a time axis (TimeAxis), with regular sampling rate. 
-    
+    A typical example is a time axis (TimeAxis), with regular sampling rate.
+
     :param gain: Step size (scaling factor) for the linear axis
     :type gain: float
     :param offset: The offset (value) of the first sample
@@ -64,6 +64,7 @@ class LinearAxis(AxisBase):
     :param unit: The unit of measurement for this axis (inherited from AxisBase)
     :type unit: str
     """
+
     gain: float = 1.0
     offset: float = 0.0
 
@@ -74,7 +75,7 @@ class LinearAxis(AxisBase):
     def value(self, x):
         """
         Convert index(es) to axis value(s) using the linear transformation.
-        
+
         :param x: Index or array of indices to convert
         :type x: int | npt.NDArray[:class:`numpy.int_`]
         :return: Corresponding axis value(s)
@@ -105,7 +106,7 @@ class LinearAxis(AxisBase):
     def create_time_axis(cls, fs: float, offset: float = 0.0) -> "LinearAxis":
         """
         Convenience method to construct a LinearAxis for time.
-        
+
         :param fs: Sampling frequency in Hz
         :type fs: float
         :param offset: Time offset in seconds (default: 0.0)
@@ -120,17 +121,18 @@ class LinearAxis(AxisBase):
 class ArrayWithNamedDims:
     """
     Base class for arrays with named dimensions.
-    
+
     This class provides a foundation for arrays where each dimension has a name,
     enabling more intuitive array manipulation and access patterns.
-    
+
     :param data: The underlying numpy array data
     :type data: npt.NDArray
     :param dims: List of dimension names, must match the array's number of dimensions
     :type dims: list[str]
-    
+
     :raises ValueError: If dims length doesn't match data.ndim or contains duplicate names
     """
+
     data: npt.NDArray
     dims: list[str]
 
@@ -154,10 +156,10 @@ class ArrayWithNamedDims:
 class CoordinateAxis(AxisBase, ArrayWithNamedDims):
     """
     An axis implementation that uses explicit coordinate values stored in an array.
-    
+
     This class allows for non-linear or irregularly spaced coordinate systems
     by storing the actual coordinate values in a data array.
-    
+
     Inherits from both AxisBase and ArrayWithNamedDims, combining axis functionality
     with named dimension support.
 
@@ -168,6 +170,7 @@ class CoordinateAxis(AxisBase, ArrayWithNamedDims):
     :param dims: List of dimension names, must match the array's number of dimensions (inherited from ArrayWithNamedDims)
     :type dims: list[str]
     """
+
     @typing.overload
     def value(self, x: int) -> typing.Any: ...
     @typing.overload
@@ -175,7 +178,7 @@ class CoordinateAxis(AxisBase, ArrayWithNamedDims):
     def value(self, x):
         """
         Get coordinate value(s) at the given index(es).
-        
+
         :param x: Index or array of indices to lookup
         :type x: int | npt.NDArray[:class:`numpy.int_`]
         :return: Coordinate value(s) at the specified index(es)
@@ -188,15 +191,15 @@ class CoordinateAxis(AxisBase, ArrayWithNamedDims):
 class AxisArray(ArrayWithNamedDims):
     """
     A lightweight message class comprising a numpy ndarray and its metadata.
-    
+
     AxisArray extends ArrayWithNamedDims to provide a complete data structure for
     scientific computing with named dimensions, axis coordinate systems, and metadata.
     It's designed to be similar to xarray.DataArray but optimized for message passing
     in streaming applications.
-    
+
     :param data: The underlying numpy array data (inherited from ArrayWithNamedDims)
     :type data: npt.NDArray
-    :param dims: List of dimension names (inherited from ArrayWithNamedDims)  
+    :param dims: List of dimension names (inherited from ArrayWithNamedDims)
     :type dims: list[str]
     :param axes: Dictionary mapping dimension names to their axis coordinate systems
     :type axes: dict[str, AxisBase]
@@ -205,6 +208,7 @@ class AxisArray(ArrayWithNamedDims):
     :param key: Optional key identifier for this array, typically used to specify source device (default is empty string)
     :type key: str
     """
+
     axes: dict[str, AxisBase] = field(default_factory=dict)
     attrs: dict[str, typing.Any] = field(default_factory=dict)
     key: str = ""
@@ -216,7 +220,7 @@ class AxisArray(ArrayWithNamedDims):
         # returns NotImplemented if classes aren't equal.  Unintuitively,
         # NotImplemented seems to evaluate as 'True' in an if statement.
         equal = super().__eq__(other)
-        if equal != True:
+        if equal is not True:
             return equal
 
         # checks for AxisArray fields
@@ -233,10 +237,11 @@ class AxisArray(ArrayWithNamedDims):
     class Axis(LinearAxis):
         """
         Deprecated alias for LinearAxis.
-        
+
         .. deprecated:: 3.6.0
             Use :class:`LinearAxis` instead.
         """
+
         def __post_init__(self) -> None:
             warnings.warn(
                 "AxisArray.Axis is a deprecated alias for LinearAxis",
@@ -263,19 +268,20 @@ class AxisArray(ArrayWithNamedDims):
     class AxisInfo:
         """
         Container for axis information including the axis object, index, and size.
-        
+
         This class provides a convenient way to access both the axis coordinate system
         and metadata about where that axis appears in the array structure.
-        
+
         :param axis: The axis coordinate system
         :type axis: AxisBase
         :param idx: The index of this axis in the AxisArray object's dimension list
-        :type idx: int  
+        :type idx: int
         :param size: The size of this dimension (stored as None for CoordinateAxis which determines size from data)
         :type size: int | None
-        
+
         :raises ValueError: If size rules are violated for the axis type
         """
+
         axis: AxisBase
         idx: int
         # TODO (kpilch): rename this to _size as preferred usage is len(obj), not obj.size
@@ -300,7 +306,7 @@ class AxisArray(ArrayWithNamedDims):
         def indices(self) -> npt.NDArray[np.int_]:
             """
             Get array of all valid indices for this axis.
-            
+
             :return: Array of indices from 0 to len(self)-1
             :rtype: npt.NDArray[:class:`numpy.int_`]
             """
@@ -310,7 +316,7 @@ class AxisArray(ArrayWithNamedDims):
         def values(self) -> npt.NDArray:
             """
             Get array of coordinate values for all indices of this axis.
-            
+
             :return: Array of coordinate values computed from axis.value(indices)
             :rtype: npt.NDArray
             """
@@ -323,13 +329,13 @@ class AxisArray(ArrayWithNamedDims):
     ) -> T:
         """
         Select data using integer-based indexing along specified dimensions.
-        
+
         This method allows for flexible indexing using integers, slices, or arrays
         of integers to select subsets of the data along named dimensions.
-        
+
         :param indexers: Dictionary of {dimension_name: indexer} pairs
         :type indexers: typing.Any | None
-        :param indexers_kwargs: Alternative way to specify indexers as keyword arguments  
+        :param indexers_kwargs: Alternative way to specify indexers as keyword arguments
         :type indexers_kwargs: typing.Any
         :return: New AxisArray with selected data
         :rtype: T
@@ -368,14 +374,14 @@ class AxisArray(ArrayWithNamedDims):
     ) -> T:
         """
         Select data using label-based indexing along specified dimensions.
-        
+
         This method allows selection using real-world coordinate values rather than
         integer indices. Currently supports only slice objects and LinearAxis.
-        
+
         :param indexers: Dictionary of {dimension_name: slice_indexer} pairs
         :type indexers: typing.Any | None
         :param indexers_kwargs: Alternative way to specify indexers as keyword arguments
-        :type indexers_kwargs: typing.Any  
+        :type indexers_kwargs: typing.Any
         :return: New AxisArray with selected data
         :rtype: T
         :raises ValueError: If indexer is not a slice or axis is not a LinearAxis
@@ -400,7 +406,7 @@ class AxisArray(ArrayWithNamedDims):
     def shape(self) -> tuple[int, ...]:
         """
         Shape of data.
-        
+
         :return: Tuple representing the shape of the underlying data array
         :rtype: tuple[int, ...]
         """
@@ -409,10 +415,10 @@ class AxisArray(ArrayWithNamedDims):
     def to_xr_dataarray(self) -> "DataArray":
         """
         Convert this AxisArray to an xarray DataArray.
-        
+
         This method creates an xarray DataArray with equivalent data, coordinates,
         dimensions, and attributes. Useful for interoperability with the xarray ecosystem.
-        
+
         :return: xarray DataArray representation of this AxisArray
         :rtype: xarray.DataArray
         """
@@ -430,7 +436,7 @@ class AxisArray(ArrayWithNamedDims):
     def ax(self, dim: str | int) -> AxisInfo:
         """
         Get AxisInfo for a specified dimension.
-        
+
         :param dim: Dimension name or index
         :type dim: str | int
         :return: AxisInfo containing axis, index, and size information
@@ -445,7 +451,7 @@ class AxisArray(ArrayWithNamedDims):
     def get_axis(self, dim: str | int) -> AxisBase:
         """
         Get the axis coordinate system for a specified dimension.
-        
+
         :param dim: Dimension name or index
         :type dim: str | int
         :return: The axis coordinate system (defaults to LinearAxis if not specified)
@@ -461,7 +467,7 @@ class AxisArray(ArrayWithNamedDims):
     def get_axis_name(self, dim: int) -> str:
         """
         Get the dimension name for a given axis index.
-        
+
         :param dim: The axis index
         :type dim: int
         :return: The dimension name
@@ -472,7 +478,7 @@ class AxisArray(ArrayWithNamedDims):
     def get_axis_idx(self, dim: str) -> int:
         """
         Get the axis index for a given dimension name.
-        
+
         :param dim: The dimension name
         :type dim: str
         :return: The axis index
@@ -487,7 +493,7 @@ class AxisArray(ArrayWithNamedDims):
     def axis_idx(self, dim: str | int) -> int:
         """
         Get the axis index for a given dimension name or pass through if already an int.
-        
+
         :param dim: Dimension name or index
         :type dim: str | int
         :return: The axis index
@@ -502,7 +508,7 @@ class AxisArray(ArrayWithNamedDims):
     def as2d(self, dim: str | int) -> npt.NDArray:
         """
         Get a 2D view of the data with the specified dimension as the first axis.
-        
+
         :param dim: Dimension name or index to move to first axis
         :type dim: str | int
         :return: 2D array view with shape (dim_size, remaining_elements)
@@ -510,15 +516,13 @@ class AxisArray(ArrayWithNamedDims):
         """
         return as2d(self.data, self.axis_idx(dim), xp=get_namespace(self.data))
 
-    def iter_over_axis(
-        self: T, axis: str | int
-    ) -> Generator[T, None, None]:
+    def iter_over_axis(self: T, axis: str | int) -> Generator[T, None, None]:
         """
         Iterate over slices along the specified axis.
-        
+
         Yields AxisArray objects for each slice along the given axis, with that
         dimension removed from the resulting arrays.
-        
+
         :param axis: Dimension name or index to iterate over
         :type axis: str | int
         :yields: AxisArray objects for each slice along the axis
@@ -540,16 +544,14 @@ class AxisArray(ArrayWithNamedDims):
             yield it_aa
 
     @contextmanager
-    def view2d(
-        self, dim: str | int
-    ) -> Generator[npt.NDArray, None, None]:
+    def view2d(self, dim: str | int) -> Generator[npt.NDArray, None, None]:
         """
         Context manager providing a 2D view of the data.
-        
+
         Yields a 2D array view with the specified dimension as the first axis.
         Changes to the yielded array may be reflected in the original data.
-        
-        :param dim: Dimension name or index to move to first axis  
+
+        :param dim: Dimension name or index to move to first axis
         :type dim: str | int
         :yields: 2D array view with shape (dim_size, remaining_elements)
         :rtype: collections.abc.Generator[npt.NDArray, None, None]
@@ -560,8 +562,8 @@ class AxisArray(ArrayWithNamedDims):
     def shape2d(self, dim: str | int) -> tuple[int, int]:
         """
         Get the 2D shape when viewing data with specified dimension first.
-        
-        :param dim: Dimension name or index  
+
+        :param dim: Dimension name or index
         :type dim: str | int
         :return: Tuple of (dim_size, remaining_elements)
         :rtype: tuple[int, int]
@@ -577,7 +579,7 @@ class AxisArray(ArrayWithNamedDims):
     ) -> T:
         """
         Concatenate multiple AxisArray objects along a specified dimension.
-        
+
         :param aas: Variable number of AxisArray objects to concatenate
         :type aas: T
         :param dim: Dimension name along which to concatenate
@@ -637,7 +639,7 @@ class AxisArray(ArrayWithNamedDims):
     ) -> T:
         """
         Transpose (reorder) the dimensions of an AxisArray.
-        
+
         :param aa: The AxisArray to transpose
         :type aa: T
         :param dims: New dimension order (names or indices). If None, reverses all dimensions
@@ -653,9 +655,7 @@ class AxisArray(ArrayWithNamedDims):
         return replace(aa, data=new_data, dims=new_dims, axes=aa.axes)
 
 
-def slice_along_axis(
-    in_arr: npt.NDArray, sl: slice | int, axis: int
-) -> npt.NDArray:
+def slice_along_axis(in_arr: npt.NDArray, sl: slice | int, axis: int) -> npt.NDArray:
     """
     Slice the input array along a specified axis using the given slice object or integer index.
      Integer arguments to `sl` will cause the sliced dimension to be dropped.
@@ -689,7 +689,7 @@ def sliding_win_oneaxis(
 ) -> npt.NDArray:
     """
     Generates a view of an array using a sliding window of specified length along a specified axis of the input array.
-    This is a slightly optimized version of nps.sliding_window_view with a few important differences:
+    This is a slightly optimized version of numpy.lib.stride_tricks.sliding_window_view with a few important differences:
 
     - This only accepts a single nwin and a single axis, thus we can skip some checks.
     - The new `win` axis precedes immediately the original target axis, unlike sliding_window_view where the
@@ -757,7 +757,7 @@ def _as2d(
 ) -> tuple[npt.NDArray, tuple[int, ...]]:
     """
     Internal helper function to reshape array to 2D with specified axis first.
-    
+
     :param in_arr: Input array to be reshaped
     :type in_arr: npt.NDArray
     :param axis: Axis to move to first position (default: 0)
@@ -781,7 +781,7 @@ def _as2d(
 def as2d(in_arr: npt.NDArray, axis: int = 0, *, xp) -> npt.NDArray:
     """
     Reshape array to 2D with specified axis first.
-    
+
     :param in_arr: Input array
     :type in_arr: npt.NDArray
     :param axis: Axis to move to first position (default: 0)
@@ -795,9 +795,7 @@ def as2d(in_arr: npt.NDArray, axis: int = 0, *, xp) -> npt.NDArray:
 
 
 @contextmanager
-def view2d(
-    in_arr: npt.NDArray, axis: int = 0
-) -> Generator[npt.NDArray, None, None]:
+def view2d(in_arr: npt.NDArray, axis: int = 0) -> Generator[npt.NDArray, None, None]:
     """
     Context manager providing 2D view of the array, no matter what input dimensionality is.
     Yields a view of underlying data when possible, changes to data in yielded
@@ -806,8 +804,8 @@ def view2d(
     NOTE: In practice, I'm not sure this is very useful because it requires modifying
     the numpy array data in-place, which limits its application to zero-copy messages
 
-    NOTE: The context manager allows the use of `with` when calling `view2d`. 
-    
+    NOTE: The context manager allows the use of `with` when calling `view2d`.
+
     :param in_arr: Input array to be viewed as 2D
     :type in_arr: npt.NDArray
     :param axis: Dimension index to move to first axis (Default = 0)
@@ -829,7 +827,7 @@ def view2d(
 def shape2d(arr: npt.NDArray, axis: int = 0) -> tuple[int, int]:
     """
     Calculate the 2D shape when viewing array with specified axis first.
-    
+
     :param arr: Input array
     :type arr: npt.NDArray
     :param axis: Axis to move to first position (default: 0)

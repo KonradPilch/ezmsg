@@ -49,12 +49,13 @@ class PubChannelInfo(ChannelInfo):
 class Publisher:
     """
     A publisher client for broadcasting messages to subscribers.
-    
+
     Publisher manages shared memory allocation, connection handling with subscribers,
     backpressure control, and supports both shared memory and TCP transport methods.
     Messages are broadcast to all connected subscribers with automatic cleanup
     and resource management.
     """
+
     id: UUID
     pid: int
     topic: str
@@ -80,7 +81,7 @@ class Publisher:
     def client_type() -> bytes:
         """
         Get the client type identifier for publishers.
-        
+
         :return: Command byte identifying this as a publisher client.
         :rtype: bytes
         """
@@ -93,7 +94,6 @@ class Publisher:
         graph_address: AddressType | None = None,
         host: str | None = None,
         port: int | None = None,
-
         buf_size: int = DEFAULT_SHM_SIZE,
         num_buffers: int = 32,
         start_paused: bool = False,
@@ -101,7 +101,7 @@ class Publisher:
     ) -> "Publisher":
         """
         Create a new Publisher instance and register it with the graph server.
-        
+
         :param topic: The topic this publisher will broadcast to.
         :type topic: str
         :param graph_service: Service for graph server communication.
@@ -127,13 +127,13 @@ class Publisher:
 
         pub_id = UUID(await read_str(reader))
         pub = cls(
-            id = pub_id,
-            topic = topic, 
-            shm = shm, 
-            graph_address = graph_address, 
-            num_buffers = num_buffers, 
-            start_paused = start_paused, 
-            force_tcp = force_tcp,
+            id=pub_id,
+            topic=topic,
+            shm=shm,
+            graph_address=graph_address,
+            num_buffers=num_buffers,
+            start_paused=start_paused,
+            force_tcp=force_tcp,
         )
 
         start_port = int(
@@ -142,33 +142,32 @@ class Publisher:
         sock = create_socket(host, port, start_port=start_port)
         server = await asyncio.start_server(pub._channel_connect, sock=sock)
         pub._connection_task = asyncio.create_task(
-            pub._serve_channels(server), 
-            name = f'pub-{pub.id}: {pub.topic}'
+            pub._serve_channels(server), name=f"pub-{pub.id}: {pub.topic}"
         )
 
         # Notify GraphServer that our server is up
         channel_server_address = Address(*sock.getsockname())
         channel_server_address.to_stream(writer)
-        result = await reader.read(1) # channels connect
+        result = await reader.read(1)  # channels connect
         if result != Command.COMPLETE.value:
-            logger.warning(f'Could not create publisher {topic=}')
+            logger.warning(f"Could not create publisher {topic=}")
 
-        # Pass off graph connection keep-alive to publisher task 
+        # Pass off graph connection keep-alive to publisher task
         pub._graph_task = asyncio.create_task(
             pub._graph_connection(reader, writer),
-            name = f'pub-{pub.id}: _graph_connection'
+            name=f"pub-{pub.id}: _graph_connection",
         )
 
         pub._local_channel = await CHANNELS.register_local_pub(
-            pub_id = pub.id, 
-            local_backpressure = pub._backpressure,
-            graph_address = pub._graph_address, 
+            pub_id=pub.id,
+            local_backpressure=pub._backpressure,
+            graph_address=pub._graph_address,
         )
 
-        logger.debug(f'created pub {pub.id=} {topic=} {channel_server_address=}')
+        logger.debug(f"created pub {pub.id=} {topic=} {channel_server_address=}")
 
         return pub
-    
+
     async def _serve_channels(self, server: asyncio.Server) -> None:
         try:
             await server.serve_forever()
@@ -192,7 +191,7 @@ class Publisher:
         """
         Initialize a Publisher instance.
         DO NOT USE this constructor to make a Publisher; use `create` instead
-        
+
         :param id: Unique identifier for this publisher.
         :type id: UUID
         :param topic: The topic this publisher broadcasts to.
@@ -229,7 +228,7 @@ class Publisher:
     def close(self) -> None:
         """
         Close the publisher and cancel all associated tasks.
-        
+
         Cancels graph connection, shared memory, connection server,
         and all subscriber handling tasks.
         """
@@ -242,7 +241,7 @@ class Publisher:
     async def wait_closed(self) -> None:
         """
         Wait for all publisher resources to be fully closed.
-        
+
         Waits for shared memory cleanup, graph connection termination,
         connection server shutdown, and all subscriber tasks to complete.
         """
@@ -260,10 +259,10 @@ class Publisher:
     ) -> None:
         """
         Handle communication with the graph server.
-        
+
         Processes commands from the graph server including COMPLETE, PAUSE,
         RESUME, and SYNC operations.
-        
+
         :param reader: Stream reader for receiving commands from graph server.
         :type reader: asyncio.StreamReader
         :param writer: Stream writer for responding to graph server.
@@ -303,10 +302,10 @@ class Publisher:
     ) -> None:
         """
         Handle new subscriber connections.
-        
+
         Exchanges identification information with connecting subscribers
         and sets up subscriber handling tasks.
-        
+
         :param reader: Stream reader for receiving subscriber info.
         :type reader: asyncio.StreamReader
         :param writer: Stream writer for sending publisher info.
@@ -316,7 +315,7 @@ class Publisher:
 
         if len(cmd) == 0:
             return
-        
+
         if cmd == Command.CHANNEL.value:
             channel_id_str = await read_str(reader)
             channel_id = UUID(channel_id_str)
@@ -335,10 +334,10 @@ class Publisher:
     ) -> None:
         """
         Handle communication with a specific channel.
-        
+
         Processes acknowledgments from channels and manages backpressure
         control based on channel feedback.
-        
+
         :param info: Information about the channel connection.
         :type info: PubChannelInfo
         :param reader: Stream reader for receiving channel messages.
@@ -368,7 +367,7 @@ class Publisher:
     async def sync(self) -> None:
         """
         Pause and drain backpressure.
-        
+
         Temporarily pauses the publisher and waits for all pending
         messages to be acknowledged by subscribers.
         """
@@ -379,7 +378,7 @@ class Publisher:
     def running(self) -> bool:
         """
         Check if the publisher is currently running.
-        
+
         :return: True if publisher is running and accepting broadcasts.
         :rtype: bool
         """
@@ -388,7 +387,7 @@ class Publisher:
     def pause(self) -> None:
         """
         Pause the publisher to stop broadcasting messages.
-        
+
         Messages sent to broadcast() will block until resumed.
         """
         self._running.clear()
@@ -396,7 +395,7 @@ class Publisher:
     def resume(self) -> None:
         """
         Resume the publisher to allow broadcasting messages.
-        
+
         Unblocks any pending broadcast() calls.
         """
         self._running.set()
@@ -404,10 +403,10 @@ class Publisher:
     async def broadcast(self, obj: Any) -> None:
         """
         Broadcast a message to all connected subscribers.
-        
+
         Handles message serialization, shared memory management, transport
         selection (local/SHM/TCP), and backpressure control automatically.
-        
+
         :param obj: The object/message to broadcast to subscribers.
         :type obj: Any
         """
@@ -426,14 +425,24 @@ class Publisher:
         # Get local channel and put variable there for local tx
         self._local_channel.put_local(self._msg_id, obj)
 
-        if self._force_tcp or any(ch.pid != self.pid or not ch.shm_ok for ch in self._channels.values()):
-            with MessageMarshal.serialize(self._msg_id, obj) as (total_size, header, buffers):
+        if self._force_tcp or any(
+            ch.pid != self.pid or not ch.shm_ok for ch in self._channels.values()
+        ):
+            with MessageMarshal.serialize(self._msg_id, obj) as (
+                total_size,
+                header,
+                buffers,
+            ):
                 total_size_bytes = uint64_to_bytes(total_size)
 
-                if not self._force_tcp and any(ch.pid != self.pid and ch.shm_ok for ch in self._channels.values()):
+                if not self._force_tcp and any(
+                    ch.pid != self.pid and ch.shm_ok for ch in self._channels.values()
+                ):
                     if self._shm.buf_size < total_size:
-                        new_shm = await GraphService(self._graph_address).create_shm(self._num_buffers, total_size * 2)
-                        
+                        new_shm = await GraphService(self._graph_address).create_shm(
+                            self._num_buffers, total_size * 2
+                        )
+
                         for i in range(self._num_buffers):
                             try:
                                 with self._shm.buffer(i, readonly=True) as from_buf:
@@ -441,7 +450,7 @@ class Publisher:
                                         MessageMarshal.copy_obj(from_buf, to_buf)
                             except UninitializedMemory:
                                 pass
-                        
+
                         self._shm.close()
                         await self._shm.wait_closed()
                         self._shm = new_shm
@@ -450,26 +459,29 @@ class Publisher:
                         MessageMarshal._write(mem, header, buffers)
 
                 for channel in self._channels.values():
-
-                    msg: bytes = b''
+                    msg: bytes = b""
 
                     if self.pid == channel.pid and channel.shm_ok:
-                        continue # Local transmission handled by channel.put
+                        continue  # Local transmission handled by channel.put
 
-                    elif (not self._force_tcp) and self.pid != channel.pid and channel.shm_ok:
+                    elif (
+                        (not self._force_tcp)
+                        and self.pid != channel.pid
+                        and channel.shm_ok
+                    ):
                         msg = (
-                            Command.TX_SHM.value +
-                            msg_id_bytes +
-                            encode_str(self._shm.name)
+                            Command.TX_SHM.value
+                            + msg_id_bytes
+                            + encode_str(self._shm.name)
                         )
 
                     else:
                         msg = (
-                            Command.TX_TCP.value +
-                            msg_id_bytes +
-                            total_size_bytes +
-                            header +
-                            b''.join([buffer for buffer in buffers])
+                            Command.TX_TCP.value
+                            + msg_id_bytes
+                            + total_size_bytes
+                            + header
+                            + b"".join([buffer for buffer in buffers])
                         )
 
                     try:

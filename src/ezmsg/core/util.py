@@ -1,5 +1,4 @@
 from collections.abc import Mapping
-import sys
 import typing
 
 
@@ -9,7 +8,7 @@ T = typing.TypeVar("T")
 def is_dict_like(value: typing.Any) -> typing.TypeGuard[Mapping]:
     """
     Check if a value behaves like a dictionary.
-    
+
     This function checks if the value has the basic dictionary interface
     by verifying it has 'keys' and '__getitem__' attributes.
 
@@ -29,7 +28,7 @@ def either_dict_or_kwargs(
     """
     Handle flexible argument passing patterns for functions that accept either
     positional dict or keyword arguments.
-    
+
     This utility function helps implement the common pattern where a function
     can accept either a dictionary as the first argument or keyword arguments,
     but not both.

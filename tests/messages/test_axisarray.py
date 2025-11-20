@@ -1,3 +1,4 @@
+import importlib.util
 import pytest
 import numpy as np
 
@@ -274,15 +275,8 @@ def test_sliding_win_oneaxis(nwin: int, axis: int, step: int):
     assert np.shares_memory(res, expected)
 
 
-def xarray_available():
-    try:
-        import xarray
-
-        return True
-    except ImportError:
-        return False
-    except ValueError:
-        return False
+def xarray_available() -> bool:
+    return importlib.util.find_spec("xarray") is not None
 
 
 @pytest.mark.skipif(

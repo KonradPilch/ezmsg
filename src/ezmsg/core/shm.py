@@ -1,9 +1,7 @@
 import asyncio
 from collections.abc import Generator
 import logging
-import typing
 
-from uuid import UUID
 from dataclasses import dataclass, field
 from contextlib import contextmanager, suppress
 from multiprocessing import resource_tracker
@@ -19,6 +17,7 @@ logger = logging.getLogger("ezmsg")
 
 _std_register = resource_tracker.register
 
+
 def _ignore_shm(name, rtype):
     if rtype == "shared_memory":
         return
@@ -29,10 +28,10 @@ def _ignore_shm(name, rtype):
 def _untracked_shm() -> Generator[None, None, None]:
     """
     Disable SHM tracking within context - https://bugs.python.org/issue38119.
-    
+
     This context manager temporarily disables shared memory tracking to work
     around a Python bug where shared memory segments are not properly cleaned up.
-    
+
     :return: Context manager generator.
     :rtype: collections.abc.Generator[None, None, None]
     """
@@ -61,6 +60,7 @@ class SHMContext:
 
     This format repeats itself for every buffer in the SharedMemory block.
     """
+
     num_buffers: int
     buf_size: int
 
@@ -71,7 +71,7 @@ class SHMContext:
     def __init__(self, name: str) -> None:
         """
         Initialize SHMContext by connecting to an existing shared memory segment.
-        
+
         :param name: The name of the shared memory segment to connect to.
         :type name: str
         :raises BufferError: If shared memory segment cannot be accessed.
@@ -99,7 +99,7 @@ class SHMContext:
     ) -> "SHMContext":
         """
         Create a new SHMContext with connection monitoring.
-        
+
         :param shm_name: Name of the shared memory segment.
         :type shm_name: str
         :param reader: Stream reader for connection monitoring.
@@ -111,11 +111,10 @@ class SHMContext:
         """
         context = cls(shm_name)
         context._graph_task = asyncio.create_task(
-            context._graph_connection(reader, writer), 
-            name=f"{context.name}_monitor"
+            context._graph_connection(reader, writer), name=f"{context.name}_monitor"
         )
         return context
-    
+
     async def _graph_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -131,7 +130,7 @@ class SHMContext:
     def __getitem__(self, idx: int) -> memoryview:
         """
         Get a memory view of a specific buffer in the shared memory segment.
-        
+
         :param idx: Index of the buffer to access.
         :type idx: int
         :return: A memoryview of the buffer.
@@ -148,7 +147,7 @@ class SHMContext:
     ) -> Generator[memoryview, None, None]:
         """
         Get a memory view of a specific buffer in the shared memory segment.
-        
+
         :param idx: Index of the buffer to access.
         :type idx: int
         :param readonly: Whether to provide read-only access to the buffer.
@@ -166,7 +165,7 @@ class SHMContext:
     def close(self) -> None:
         """
         Close the shared memory context and cancel monitoring.
-        
+
         This initiates an asynchronous close operation and cancels the
         connection monitor task.
         """
@@ -175,18 +174,18 @@ class SHMContext:
     async def wait_closed(self) -> None:
         """
         Wait for the shared memory context to be fully closed.
-        
+
         This method waits for the monitoring task to complete, indicating
         that the connection has been properly terminated.
         """
         with suppress(asyncio.CancelledError):
             await self._graph_task
-            
+
     @property
     def name(self) -> str:
         """
         Get the name of the shared memory segment.
-        
+
         :return: The shared memory segment name.
         :rtype: str
         """
@@ -196,7 +195,7 @@ class SHMContext:
     def size(self) -> int:
         """
         Get the usable size of each buffer (excluding header).
-        
+
         :return: Buffer size minus 16-byte header.
         :rtype: int
         """
@@ -207,33 +206,32 @@ class SHMContext:
 class SHMInfo:
     """
     Information about a shared memory segment and its active leases.
-    
+
     Tracks the SharedMemory object and manages client connection leases.
     When all leases are released, the shared memory is automatically cleaned up.
     """
+
     shm: SharedMemory
     leases: set["asyncio.Task[None]"] = field(default_factory=set)
 
     @classmethod
-    def create(
-        cls, num_buffers: int, buf_size: int
-    ) -> "SHMInfo":
-        buf_size += 16 * num_buffers # Repeated header info makes this a bit bigger
+    def create(cls, num_buffers: int, buf_size: int) -> "SHMInfo":
+        buf_size += 16 * num_buffers  # Repeated header info makes this a bit bigger
         shm = SharedMemory(size=num_buffers * buf_size, create=True)
         shm.buf[:] = b"0" * len(shm.buf)  # Guarantee zeros
         shm.buf[0:8] = uint64_to_bytes(num_buffers)
         shm.buf[8:16] = uint64_to_bytes(buf_size)
         return cls(shm)
-    
+
     def lease(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> "asyncio.Task[None]":
         """
         Create a lease for this shared memory segment.
-        
+
         The lease monitors the client connection and automatically releases
         the shared memory when the client disconnects.
-        
+
         :param reader: Stream reader to monitor for client disconnection.
         :type reader: asyncio.StreamReader
         :param writer: Stream writer for connection cleanup.

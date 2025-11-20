@@ -62,11 +62,11 @@ class UnitMeta(ComponentMeta):
 class Unit(Component, metaclass=UnitMeta):
     """
     Represents a single step in the graph.
-    
+
     Units can subscribe, publish, and have tasks. Units are the fundamental building blocks
     of ezmsg applications that perform actual computation and message processing.
     To create a Unit, inherit from the Unit class.
-    
+
     :param settings: Optional settings object for unit configuration
     :type settings: Settings | None
     """
@@ -97,11 +97,11 @@ class Unit(Component, metaclass=UnitMeta):
     async def initialize(self) -> None:
         """
         Runs when the Unit is instantiated.
-        
+
         This is called from within the same process this unit will live in.
-        This lifecycle hook can be overridden. It can be run as async functions 
+        This lifecycle hook can be overridden. It can be run as async functions
         by simply adding the async keyword when overriding.
-        
+
         This method is where you should initialize your unit's state and prepare
         for message processing.
         """
@@ -110,11 +110,11 @@ class Unit(Component, metaclass=UnitMeta):
     async def shutdown(self) -> None:
         """
         Runs when the Unit terminates.
-        
+
         This is called from within the same process this unit will live in.
-        This lifecycle hook can be overridden. It can be run as async functions 
+        This lifecycle hook can be overridden. It can be run as async functions
         by simply adding the async keyword when overriding.
-        
+
         This method is where you should clean up resources and perform
         any necessary shutdown procedures.
         """
@@ -124,7 +124,7 @@ class Unit(Component, metaclass=UnitMeta):
 def publisher(stream: OutputStream):
     """
     A decorator for a method that publishes to a stream in the task/messaging thread.
-    
+
     An async function will yield messages on the designated :obj:`OutputStream`.
     A function can have both ``@subscriber`` and ``@publisher`` decorators.
 
@@ -135,7 +135,7 @@ def publisher(stream: OutputStream):
     :raises ValueError: If stream is not an OutputStream
 
     Example usage:
-    
+
     .. code-block:: python
 
       from collections.abc import AsyncGenerator
@@ -163,8 +163,8 @@ def publisher(stream: OutputStream):
 def subscriber(stream: InputStream, zero_copy: bool = False):
     """
     A decorator for a method that subscribes to a stream in the task/messaging thread.
-    
-    An async function will run once per message received from the :obj:`InputStream` 
+
+    An async function will run once per message received from the :obj:`InputStream`
     it subscribes to. A function can have both ``@subscriber`` and ``@publisher`` decorators.
 
     :param stream: The input stream to subscribe to
@@ -203,7 +203,7 @@ def subscriber(stream: InputStream, zero_copy: bool = False):
 def main(func: Callable):
     """
     A decorator which designates this function to run as the main thread for this Unit.
-    
+
     A Unit may only have one main function. The main function runs independently
     of the message processing and is typically used for initialization, background
     processing, or cleanup tasks.
@@ -220,7 +220,7 @@ def main(func: Callable):
 def timeit(func: Callable):
     """
     A decorator that logs the execution time of the decorated function.
-    
+
     ezmsg will log the amount of time this function takes to execute to
     the ezmsg logger. This is useful for performance monitoring and
     optimization. The execution time is logged in milliseconds.
@@ -252,7 +252,7 @@ def timeit(func: Callable):
 def thread(func: Callable):
     """
     A decorator which designates this function to run as a background thread for this Unit.
-    
+
     Thread functions run concurrently with the main message processing and can be used
     for background tasks, monitoring, or other concurrent operations.
 
@@ -268,7 +268,7 @@ def thread(func: Callable):
 def task(func: Callable):
     """
     A decorator which designates this function to run as a task in the task/messaging thread.
-    
+
     Task functions are part of the main message processing pipeline and are executed
     within the unit's primary execution context.
 
@@ -284,7 +284,7 @@ def task(func: Callable):
 def process(func: Callable):
     """
     A decorator which designates this function to run in its own process.
-    
+
     Process functions run in separate processes for isolation and can be used
     for CPU-intensive operations or when process isolation is required.
 
