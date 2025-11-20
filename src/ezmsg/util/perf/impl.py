@@ -4,6 +4,7 @@ import os
 import time
 import typing
 import enum
+import sys
 
 import ezmsg.core as ez
 
@@ -26,6 +27,9 @@ except AttributeError:
 
         pass
 
+TIME = time.monotonic
+if sys.platform.startswith('win'):
+    TIME = time.perf_counter
 
 def collect(
     components: typing.Optional[typing.Mapping[str, ez.Component]] = None,
@@ -96,16 +100,16 @@ class LoadTestSource(ez.Unit):
     @ez.publisher(OUTPUT)
     async def publish(self) -> typing.AsyncGenerator:
         ez.logger.info(f"Load test publisher started. (PID: {os.getpid()})")
-        start_time = time.time()
+        start_time = TIME()
         for _ in range(self.SETTINGS.num_msgs):
-            current_time = time.time()
+            current_time = TIME()
             if current_time - start_time >= self.SETTINGS.max_duration:
                 break
 
             yield (
                 self.OUTPUT,
                 LoadTestSample(
-                    _timestamp=time.time(),
+                    _timestamp=TIME(),
                     counter=self.STATE.counter,
                     dynamic_data=np.zeros(
                         int(self.SETTINGS.dynamic_size // 4), dtype=np.float32
@@ -154,7 +158,7 @@ class LoadTestReceiver(ez.Unit):
         if sample.counter != counter + 1:
             ez.logger.warning(f"{sample.counter - counter - 1} samples skipped!")
         self.STATE.received_data.append(
-            (sample._timestamp, time.time(), sample.counter)
+            (sample._timestamp, TIME(), sample.counter)
         )
         self.STATE.counters[sample.key] = sample.counter
 
@@ -322,10 +326,13 @@ def calculate_metrics(sink: LoadTestSink) -> Metrics:
     )
 
     rx_timestamps = np.array([rx_ts for _, rx_ts, _ in sink.STATE.received_data])
+    rx_timestamps.sort()
     runtime = max_timestamp - min_timestamp
     num_samples = len(sink.STATE.received_data)
     samplerate_mean = num_samples / runtime
-    samplerate_median = 1.0 / float(np.median(np.diff(rx_timestamps)))
+    diff_timestamps = np.diff(rx_timestamps)
+    diff_timestamps = diff_timestamps[np.nonzero(diff_timestamps)]
+    samplerate_median = 1.0 / float(np.median(diff_timestamps))
     latency_mean = total_latency / num_samples
     latency_median = list(sorted(latency))[len(latency) // 2]
     total_data = num_samples * sink.SETTINGS.dynamic_size
