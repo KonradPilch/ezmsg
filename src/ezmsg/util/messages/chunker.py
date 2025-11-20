@@ -38,7 +38,7 @@ def array_chunker(
     :rtype: collections.abc.Generator[AxisArray, None, None]
     """
 
-    if not type(data) == np.ndarray:
+    if not type(data) == np.ndarray:  # noqa: E721  # hot path optimization
         data = np.array(data)
     n_chunks = int(np.ceil(data.shape[axis] / chunk_len))
     tvec = np.arange(n_chunks, dtype=float) * chunk_len / fs + tzero

@@ -36,9 +36,9 @@ def _run_perf_case(
         config=CONFIGS[config_name],
         graph_address=server.address,
     )
-    assert (
-        metrics.num_msgs > 0
-    ), f"Failed to exchange messages for {config_name}/{comm.value}/msg={msg_size}"
+    assert metrics.num_msgs > 0, (
+        f"Failed to exchange messages for {config_name}/{comm.value}/msg={msg_size}"
+    )
 
 
 @contextlib.contextmanager
