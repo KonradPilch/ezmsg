@@ -18,6 +18,14 @@ except ImportError:
 
 from .util import stable_perf
 
+try:
+    StrEnum = enum.StrEnum  # type: ignore[attr-defined]
+except AttributeError:
+    class StrEnum(str, enum.Enum):
+        """Fallback for Python < 3.11 where enum.StrEnum is unavailable."""
+
+        pass
+
 
 def collect(
     components: typing.Optional[typing.Mapping[str, ez.Component]] = None,
@@ -225,7 +233,7 @@ CONFIGS: typing.Mapping[str, Configurator] = {
 }
 
 
-class Communication(enum.StrEnum):
+class Communication(StrEnum):
     LOCAL = "local"
     SHM = "shm"
     SHM_SPREAD = "shm_spread"
