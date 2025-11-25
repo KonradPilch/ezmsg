@@ -26,7 +26,7 @@ def _resolved_task():
 
 @pytest.mark.asyncio
 async def test_channel_acknowledges_remote_messages():
-    channel = Channel(uuid4(), uuid4(), 2, None, None)
+    channel = Channel(uuid4(), uuid4(), 2, None, None, Channel._SENTINEL)
     channel._pub_writer = DummyWriter()
     channel._pub_task = _resolved_task()
     channel._graph_task = _resolved_task()
@@ -60,7 +60,7 @@ async def test_channel_acknowledges_remote_messages():
 
 @pytest.mark.asyncio
 async def test_channel_releases_local_backpressure(monkeypatch):
-    channel = Channel(uuid4(), uuid4(), 2, None, None)
+    channel = Channel(uuid4(), uuid4(), 2, None, None, Channel._SENTINEL)
     channel._pub_writer = DummyWriter()
     channel._pub_task = _resolved_task()
     channel._graph_task = _resolved_task()
@@ -88,6 +88,6 @@ async def test_channel_releases_local_backpressure(monkeypatch):
 
 
 def test_channel_put_local_requires_local_backpressure():
-    channel = Channel(uuid4(), uuid4(), 1, None, None)
+    channel = Channel(uuid4(), uuid4(), 1, None, None, Channel._SENTINEL)
     with pytest.raises(ValueError):
         channel.put_local(1, "no pub")

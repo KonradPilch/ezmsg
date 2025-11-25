@@ -56,6 +56,8 @@ class Publisher:
     and resource management.
     """
 
+    _SENTINEL = object()
+
     id: UUID
     pid: int
     topic: str
@@ -134,6 +136,7 @@ class Publisher:
             num_buffers=num_buffers,
             start_paused=start_paused,
             force_tcp=force_tcp,
+            _guard=cls._SENTINEL,
         )
 
         start_port = int(
@@ -187,6 +190,7 @@ class Publisher:
         num_buffers: int = 32,
         start_paused: bool = False,
         force_tcp: bool = False,
+        _guard = None
     ) -> None:
         """
         Initialize a Publisher instance.
@@ -205,6 +209,12 @@ class Publisher:
         :param force_tcp: Whether to force TCP transport instead of shared memory.
         :type force_tcp: bool
         """
+        if _guard is not self._SENTINEL:
+            raise TypeError(
+                "Publisher cannot be instantiated directly."
+                "Use 'await Publisher.create(...)' instead."
+            )
+
         self.id = id
         self.pid = os.getpid()
         self.topic = topic
@@ -301,10 +311,10 @@ class Publisher:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         """
-        Handle new subscriber connections.
+        Handle new channel connections.
 
-        Exchanges identification information with connecting subscribers
-        and sets up subscriber handling tasks.
+        Exchanges identification information with connecting channels
+        and sets up channel handling tasks.
 
         :param reader: Stream reader for receiving subscriber info.
         :type reader: asyncio.StreamReader
@@ -326,8 +336,11 @@ class Publisher:
             coro = self._handle_channel(info, reader)
             self._channel_tasks[channel_id] = asyncio.create_task(coro)
             writer.write(Command.COMPLETE.value + uint64_to_bytes(self._num_buffers))
+            await writer.drain()
 
-        await writer.drain()
+        else:
+            raise ValueError(f"Publisher {self.id}: unexpected command {cmd=}")
+
 
     async def _handle_channel(
         self, info: PubChannelInfo, reader: asyncio.StreamReader

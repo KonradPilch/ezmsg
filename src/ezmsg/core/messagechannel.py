@@ -40,6 +40,8 @@ class Channel:
     The Channel constructor should not be called directly, instead use Channel.create(...)
     """
 
+    _SENTINEL = object()
+
     id: UUID
     pub_id: UUID
     pid: int
@@ -64,7 +66,14 @@ class Channel:
         num_buffers: int,
         shm: SHMContext | None,
         graph_address: AddressType | None,
+        _guard = None,
     ) -> None:
+        if _guard is not self._SENTINEL:
+            raise TypeError(
+                "Channel cannot be instantiated directly."
+                "Use 'await CHANNELS.register(...)' instead."
+            )
+        
         self.id = id
         self.pub_id = pub_id
         self.num_buffers = num_buffers
@@ -131,8 +140,9 @@ class Channel:
             raise ValueError(f"failed to create channel {pub_id=}")
 
         num_buffers = await read_int(reader)
+        assert num_buffers > 0, "publisher reports invalid num_buffers"
 
-        chan = cls(UUID(id_str), pub_id, num_buffers, shm, graph_address)
+        chan = cls(UUID(id_str), pub_id, num_buffers, shm, graph_address, _guard=cls._SENTINEL)
 
         chan._graph_task = asyncio.create_task(
             chan._graph_connection(graph_reader, graph_writer),
