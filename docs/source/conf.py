@@ -1,7 +1,6 @@
 # Configuration file for the Sphinx documentation builder.
 
 import os
-import sys
 
 # -- Project information --------------------------
 
@@ -75,7 +74,7 @@ html_title = f"ezmsg {version}"
 html_static_path = ["_static"]
 
 # Timestamp is inserted at every page bottom in this strftime format.
-html_last_updated_fmt = '%Y-%m-%d'
+html_last_updated_fmt = "%Y-%m-%d"
 
 # -- Options for EPUB output --------------------------
 epub_show_urls = "footnote"
@@ -95,8 +94,10 @@ def linkcode_resolve(domain, info):
     else:
         return f"{code_url}src/{filename}.py"
 
+
 # -- Options for graphviz -----------------------------
 graphviz_output_format = "svg"
+
 
 def setup(app):
     app.add_css_file("custom.css")

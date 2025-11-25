@@ -1,6 +1,4 @@
-import os
 import asyncio
-from collections.abc import AsyncGenerator
 import logging
 import typing
 
@@ -9,21 +7,15 @@ from contextlib import asynccontextmanager, suppress
 from copy import deepcopy
 
 from .graphserver import GraphService
-from .shm import SHMContext
-from .messagecache import MessageCache, Cache
-from .messagemarshal import MessageMarshal
+from .channelmanager import CHANNELS
+from .messagechannel import NotificationQueue, Channel
 
 from .netprotocol import (
-    Address,
-    UINT64_SIZE,
-    uint64_to_bytes,
-    bytes_to_uint,
-    read_int,
+    AddressType,
     read_str,
     encode_str,
     close_stream_writer,
     Command,
-    PublisherInfo,
 )
 
 
@@ -33,31 +25,39 @@ logger = logging.getLogger("ezmsg")
 class Subscriber:
     """
     A subscriber client for receiving messages from publishers.
-    
+
     Subscriber manages connections to multiple publishers, handles different
     transport methods (local, shared memory, TCP), and provides both copying
     and zero-copy message access patterns with automatic acknowledgment.
     """
+
+    _SENTINEL = object()
+
     id: UUID
-    pid: int
     topic: str
 
-    _initialized: asyncio.Event
-    _graph_task: "asyncio.Task[None]"
-    _publishers: dict[UUID, PublisherInfo]
-    _publisher_tasks: dict[UUID, "asyncio.Task[None]"]
-    _shms: dict[UUID, SHMContext]
-    _incoming: "asyncio.Queue[tuple[UUID, int]]"
+    _graph_address: AddressType | None
+    _graph_task: asyncio.Task[None]
+    _cur_pubs: set[UUID]
+    _incoming: NotificationQueue
 
-    _graph_service: GraphService
+    # FIXME: This event allows Subscriber.create to block until
+    # incoming initial connections (UPDATE) has completed. The
+    # logic is confusing and difficult to follow, but this event
+    # serves an important purpose for the time being.
+    _initialized: asyncio.Event
+
+    # NOTE: This is an optimization to retain a local handle to channels
+    # so that dict lookup and wrapper contextmanager aren't in hotpath
+    _channels: dict[UUID, Channel]
 
     @classmethod
     async def create(
-        cls, topic: str, graph_service: GraphService, **kwargs
+        cls, topic: str, graph_address: AddressType | None, **kwargs
     ) -> "Subscriber":
         """
         Create a new Subscriber instance and register it with the graph server.
-        
+
         :param topic: The topic this subscriber will listen to.
         :type topic: str
         :param graph_service: Service for graph server communication.
@@ -68,22 +68,41 @@ class Subscriber:
         :return: Initialized and registered Subscriber instance.
         :rtype: Subscriber
         """
-        reader, writer = await graph_service.open_connection()
+        reader, writer = await GraphService(graph_address).open_connection()
         writer.write(Command.SUBSCRIBE.value)
-        id_str = await read_str(reader)
-        sub = cls(UUID(id_str), topic, graph_service, **kwargs)
-        writer.write(uint64_to_bytes(sub.pid))
-        writer.write(encode_str(sub.topic))
-        sub._graph_task = asyncio.create_task(sub._graph_connection(reader, writer))
+        writer.write(encode_str(topic))
+        sub_id_str = await read_str(reader)
+        sub_id = UUID(sub_id_str)
+
+        sub = cls(sub_id, topic, graph_address, _guard=cls._SENTINEL, **kwargs)
+
+        sub._graph_task = asyncio.create_task(
+            sub._graph_connection(reader, writer),
+            name=f"sub-{sub.id}: _graph_connection",
+        )
+
+        # FIXME: We need to wait for _graph_task to service an UPDATE
+        # then receive a COMPLETE before we return a fully connected
+        # subscriber ready for recv.
         await sub._initialized.wait()
+
+        logger.debug(f"created sub {sub.id=} {topic=}")
+
         return sub
 
     def __init__(
-        self, id: UUID, topic: str, graph_service: GraphService, **kwargs
+        self, 
+        id: UUID, 
+        topic: str, 
+        graph_address: AddressType | None, 
+        _guard = None, 
+        **kwargs
     ) -> None:
         """
         Initialize a Subscriber instance.
-        
+
+        DO NOT USE this constructor, use Subscriber.create instead.
+
         :param id: Unique identifier for this subscriber.
         :type id: UUID
         :param topic: The topic this subscriber listens to.
@@ -92,55 +111,48 @@ class Subscriber:
         :type graph_service: GraphService
         :param kwargs: Additional keyword arguments (unused).
         """
+        if _guard is not self._SENTINEL:
+            raise TypeError(
+                "Subscriber cannot be instantiated directly."
+                "Use 'await Subscriber.create(...)' instead."
+            )
         self.id = id
-        self.pid = os.getpid()
         self.topic = topic
+        self._graph_address = graph_address
 
-        self._publishers = dict()
-        self._publisher_tasks = dict()
-        self._shms = dict()
+        self._cur_pubs = set()
         self._incoming = asyncio.Queue()
+        self._channels = dict()
         self._initialized = asyncio.Event()
-
-        self._graph_service = graph_service
 
     def close(self) -> None:
         """
         Close the subscriber and cancel all associated tasks.
-        
+
         Cancels graph connection, all publisher connection tasks,
         and closes all shared memory contexts.
         """
         self._graph_task.cancel()
-        for task in self._publisher_tasks.values():
-            task.cancel()
-        for shm in self._shms.values():
-            shm.close()
 
     async def wait_closed(self) -> None:
         """
         Wait for all subscriber resources to be fully closed.
-        
+
         Waits for graph connection termination, all publisher connection
         tasks to complete, and all shared memory contexts to close.
         """
         with suppress(asyncio.CancelledError):
             await self._graph_task
-        for task in self._publisher_tasks.values():
-            with suppress(asyncio.CancelledError):
-                await task
-        for shm in self._shms.values():
-            await shm.wait_closed()
 
     async def _graph_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         """
         Handle communication with the graph server.
-        
+
         Processes commands from the graph server including COMPLETE and UPDATE
         operations for managing publisher connections.
-        
+
         :param reader: Stream reader for receiving commands from graph server.
         :type reader: asyncio.StreamReader
         :param writer: Stream writer for responding to graph server.
@@ -149,151 +161,75 @@ class Subscriber:
         try:
             while True:
                 cmd = await reader.read(1)
+
                 if not cmd:
                     break
 
-                elif cmd == Command.COMPLETE.value:
+                if cmd == Command.COMPLETE.value:
+                    # FIXME: The only time GraphServer will send us a COMPLETE
+                    # is when it is done with Subscriber.create.  Unfortunately
+                    # part of creating the subscriber involves receiving an
+                    # UPDATE with all of the initial connections so that
+                    # messaging resolves as expected immediately after creation
+                    # is completed.  The only way we can service this UPDATE
+                    # is by passing control of the GraphServer's StreamReader
+                    # to this task, which can handle the UPDATE -- mid-creation
+                    # then we receive the COMPLETE in here, set the _initialized
+                    # event, which we wait on in Subscriber.create, releasing the
+                    # block and returning a fully connected/ready subscriber.
+                    # While this currently works, its non-obvious what this
+                    # accomplishes and why its implemented this way.  I just
+                    # wasted 2 hours removing this seemingly un-necessary event
+                    # to introduce a bug that is only resolved by reintroducing
+                    # the event.  Some thought should be put into replacing the
+                    # bespoke communication protocol with something a bit more
+                    # standard (JSON RPC?) with a more common/logical pattern
+                    # for creating/handling comms.  We will probably want to
+                    # keep the bespoke comms for the publisher->channel link
+                    # as that is in the hot path.
                     self._initialized.set()
 
                 elif cmd == Command.UPDATE.value:
-                    pub_addresses: dict[UUID, Address] = {}
-                    connections = await read_str(reader)
-                    connections = connections.strip(",")
-                    if len(connections):
-                        for connection in connections.split(","):
-                            pub_id, pub_address = connection.split("@")
-                            pub_id = UUID(pub_id)
-                            pub_address = Address.from_string(pub_address)
-                            pub_addresses[pub_id] = pub_address
+                    update = await read_str(reader)
+                    pub_ids = (
+                        set([UUID(id) for id in update.split(",")]) if update else set()
+                    )
 
-                    for id in set(pub_addresses.keys() - self._publishers.keys()):
-                        connected = asyncio.Event()
-                        coro = self._handle_publisher(id, pub_addresses[id], connected)
-                        task_name = f"sub{self.id}:_handle_publisher({id})"
-                        self._publisher_tasks[id] = asyncio.create_task(
-                            coro, name=task_name
+                    for pub_id in set(pub_ids - self._cur_pubs):
+                        channel = await CHANNELS.register(
+                            pub_id, self.id, self._incoming, self._graph_address
                         )
-                        await connected.wait()
+                        self._channels[pub_id] = channel
 
-                    for id in set(self._publishers.keys() - pub_addresses.keys()):
-                        self._publisher_tasks[id].cancel()
-                        with suppress(asyncio.CancelledError):
-                            await self._publisher_tasks[id]
+                    for pub_id in set(self._cur_pubs - pub_ids):
+                        await CHANNELS.unregister(pub_id, self.id, self._graph_address)
+                        del self._channels[pub_id]
 
                     writer.write(Command.COMPLETE.value)
                     await writer.drain()
 
                 else:
                     logger.warning(
-                        f"Subscriber {self.id} rx unknown command from GraphServer: {cmd}"
+                        f"Subscriber {self.topic}({self.id}) rx unknown command from GraphServer: {cmd}"
                     )
 
         except (ConnectionResetError, BrokenPipeError):
-            logger.debug(f"Subscriber {self.id} lost connection to graph server")
+            logger.debug(
+                f"Subscriber {self.topic}({self.id}) lost connection to graph server"
+            )
 
         finally:
+            for pub_id in self._channels:
+                await CHANNELS.unregister(pub_id, self.id, self._graph_address)
             await close_stream_writer(writer)
-
-    async def _handle_publisher(
-        self, id: UUID, address: Address, connected: asyncio.Event
-    ) -> None:
-        """
-        Handle communication with a specific publisher.
-        
-        Establishes connection, exchanges identification, and processes
-        incoming messages from the publisher using various transport methods.
-        
-        :param id: Unique identifier of the publisher.
-        :type id: UUID
-        :param address: Network address of the publisher.
-        :type address: Address
-        :param connected: Event to signal when connection is established.
-        :type connected: asyncio.Event
-        :raises ValueError: If publisher ID doesn't match expected ID.
-        """
-        reader, writer = await asyncio.open_connection(*address)
-        writer.write(encode_str(str(self.id)))
-        writer.write(uint64_to_bytes(self.pid))
-        writer.write(encode_str(self.topic))
-        await writer.drain()
-
-        # Pub replies with current shm name
-        # We attempt to attach and let pub know if we have SHM access
-        shm_name = await read_str(reader)
-        try:
-            (await self._graph_service.attach_shm(shm_name)).close()
-            writer.write(uint64_to_bytes(1))
-        except (ValueError, OSError):
-            writer.write(uint64_to_bytes(0))
-        await writer.drain()
-
-        pub_id_str = await read_str(reader)
-        pub_pid = await read_int(reader)
-        pub_topic = await read_str(reader)
-        num_buffers = await read_int(reader)
-
-        if id != UUID(pub_id_str):
-            raise ValueError("Unexpected Publisher ID")
-
-        # NOTE: Not thread safe
-        if id not in MessageCache:
-            MessageCache[id] = Cache(num_buffers)
-
-        self._publishers[id] = PublisherInfo(id, writer, pub_pid, pub_topic, address)
-
-        connected.set()
-
-        try:
-            while True:
-                msg = await reader.read(1)
-                if not msg:
-                    break
-
-                msg_id_bytes = await reader.read(UINT64_SIZE)
-                msg_id = bytes_to_uint(msg_id_bytes)
-
-                if msg == Command.TX_SHM.value:
-                    shm_name = await read_str(reader)
-
-                    if id not in self._shms or self._shms[id].name != shm_name:
-                        if id in self._shms:
-                            self._shms[id].close()
-                        try:
-                            self._shms[id] = await self._graph_service.attach_shm(
-                                shm_name
-                            )
-                        except ValueError:
-                            logger.info(
-                                "Invalid SHM received from publisher; may be dead"
-                            )
-                            raise
-
-                # FIXME: TCP connections could be more efficient.
-                # https://github.com/iscoe/ezmsg/issues/5
-                elif msg == Command.TX_TCP.value:
-                    buf_size = await read_int(reader)
-                    obj_bytes = await reader.readexactly(buf_size)
-
-                    with MessageMarshal.obj_from_mem(memoryview(obj_bytes)) as obj:
-                        MessageCache[id].put(msg_id, obj)
-
-                self._incoming.put_nowait((id, msg_id))
-
-        except (ConnectionResetError, BrokenPipeError):
-            logger.debug(f"connection fail: sub:{self.id} -> pub:{id}")
-
-        finally:
-            await close_stream_writer(self._publishers[id].writer)
-            del self._publishers[id]
-            logger.debug(f"disconnected: sub:{self.id} -> pub:{id}")
 
     async def recv(self) -> typing.Any:
         """
         Receive the next message with a deep copy.
-        
+
         This method creates a deep copy of the received message, allowing
         safe modification without affecting the original cached message.
-        
+
         :return: Deep copy of the received message.
         :rtype: typing.Any
         """
@@ -303,30 +239,18 @@ class Subscriber:
         return out_msg
 
     @asynccontextmanager
-    async def recv_zero_copy(self) -> AsyncGenerator[typing.Any, None]:
+    async def recv_zero_copy(self) -> typing.AsyncGenerator[typing.Any, None]:
         """
         Receive the next message with zero-copy access.
-        
+
         This context manager provides direct access to the cached message
         without copying. The message should not be modified or stored beyond
         the context manager's scope.
-        
+
         :return: Context manager yielding the received message.
         :rtype: collections.abc.AsyncGenerator[typing.Any, None]
         """
-        id, msg_id = await self._incoming.get()
-        msg_id_bytes = uint64_to_bytes(msg_id)
+        pub_id, msg_id = await self._incoming.get()
 
-        try:
-            shm = self._shms.get(id, None)
-            with MessageCache[id].get(msg_id, shm) as msg:
-                yield msg
-
-        finally:
-            if id in self._publishers:
-                try:
-                    ack = Command.RX_ACK.value + msg_id_bytes
-                    self._publishers[id].writer.write(ack)
-                    await self._publishers[id].writer.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    logger.debug(f"ack fail: sub:{self.id} -> pub:{id}")
+        with self._channels[pub_id].get(msg_id, self.id) as msg:
+            yield msg

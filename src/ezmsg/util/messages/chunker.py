@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import Generator, AsyncGenerator
 import traceback
-import typing
 
 import numpy as np
 import numpy.typing as npt
@@ -21,7 +20,7 @@ def array_chunker(
     """
     Create a generator that yields AxisArrays containing chunks of an array
     along a specified axis.
-    
+
     The generator should be useful for quick offline analyses, tests, or examples.
     This generator probably is not useful for online streaming applications.
 
@@ -39,7 +38,7 @@ def array_chunker(
     :rtype: collections.abc.Generator[AxisArray, None, None]
     """
 
-    if not type(data) == np.ndarray:
+    if not type(data) == np.ndarray:  # noqa: E721  # hot path optimization
         data = np.array(data)
     n_chunks = int(np.ceil(data.shape[axis] / chunk_len))
     tvec = np.arange(n_chunks, dtype=float) * chunk_len / fs + tzero
@@ -66,7 +65,7 @@ def array_chunker(
 class ArrayChunkerSettings(ez.Settings):
     """
     Settings for ArrayChunker unit.
-    
+
     Configuration for chunking array data along a specified axis with timing information.
 
     :param data: An array_like object to iterate over, chunk-by-chunk.
@@ -80,6 +79,7 @@ class ArrayChunkerSettings(ez.Settings):
     :param tzero: The time offset of the first chunk. Will only be used to make the time axis.
     :type tzero: float
     """
+
     data: npt.ArrayLike
     chunk_len: int
     axis: int = 0
@@ -90,10 +90,11 @@ class ArrayChunkerSettings(ez.Settings):
 class ArrayChunker(ez.Unit):
     """
     Unit for chunking array data along a specified axis.
-    
+
     Converts array data into sequential chunks along a specified axis,
     with proper timing axis information for streaming applications.
     """
+
     SETTINGS = ArrayChunkerSettings
     STATE = GenState
 
@@ -103,7 +104,7 @@ class ArrayChunker(ez.Unit):
     async def initialize(self) -> None:
         """
         Initialize the ArrayChunker unit.
-        
+
         Sets up the generator for chunking operations based on current settings.
         """
         self.construct_generator()
@@ -111,7 +112,7 @@ class ArrayChunker(ez.Unit):
     def construct_generator(self):
         """
         Construct the chunking generator with current settings.
-        
+
         Creates a new array_chunker generator instance using the unit's settings.
         """
         self.STATE.gen = array_chunker(
@@ -126,7 +127,7 @@ class ArrayChunker(ez.Unit):
     async def on_settings(self, msg: ez.Settings) -> None:
         """
         Handle incoming settings updates.
-        
+
         :param msg: New settings to apply.
         :type msg: ez.Settings
         """
@@ -137,10 +138,10 @@ class ArrayChunker(ez.Unit):
     async def send_chunk(self) -> AsyncGenerator:
         """
         Publisher method that yields data chunks.
-        
+
         Continuously yields chunks from the generator until exhausted,
         with proper exception handling for completion cases.
-        
+
         :return: Async generator yielding AxisArray chunks.
         :rtype: collections.abc.AsyncGenerator
         """

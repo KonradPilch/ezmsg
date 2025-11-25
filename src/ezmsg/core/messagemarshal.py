@@ -8,20 +8,22 @@ from typing import Any
 
 _PREAMBLE = b"EZ"
 _PREAMBLE_LEN = len(_PREAMBLE)
+NO_MESSAGE = _PREAMBLE + (b"\xff" * 8) + (b"\x00" * 8)
 
 
 class UndersizedMemory(Exception):
     """
     Exception raised when target memory buffer is too small for serialization.
-    
+
     Contains the required size needed to successfully serialize the object.
     """
+
     req_size: int
 
     def __init__(self, *args: object, req_size: int = 0) -> None:
         """
         Initialize UndersizedMemory exception.
-        
+
         :param args: Exception arguments.
         :param req_size: Required memory size in bytes.
         :type req_size: int
@@ -30,13 +32,14 @@ class UndersizedMemory(Exception):
         self.req_size = req_size
 
 
-class UninitializedMemory(Exception): 
+class UninitializedMemory(Exception):
     """
     Exception raised when attempting to read from uninitialized memory.
-    
+
     This occurs when trying to deserialize from a memory buffer that
     doesn't contain valid serialized data with the expected preamble.
     """
+
     ...
 
 
@@ -56,7 +59,7 @@ class Marshal:
     def to_mem(cls, msg_id: int, obj: Any, mem: memoryview) -> None:
         """
         Serialize an object with message ID into a memory buffer.
-        
+
         :param msg_id: Unique message identifier.
         :type msg_id: int
         :param obj: Object to serialize.
@@ -71,43 +74,45 @@ class Marshal:
             if total_size >= len(mem):
                 raise UndersizedMemory(req_size=total_size)
 
-            sidx = len(header)
-            mem[:sidx] = header[:]
-            for buf in buffers:
-                blen = len(buf)
-                mem[sidx : sidx + blen] = buf[:]
-                sidx += blen
+            cls._write(mem, header, buffers)
 
     @classmethod
-    def _assert_initialized(cls, mem: memoryview) -> None:
-        if mem[:_PREAMBLE_LEN] != _PREAMBLE:
+    def _write(cls, mem: memoryview, header: bytes, buffers: list[memoryview]):
+        sidx = len(header)
+        mem[:sidx] = header[:]
+        for buf in buffers:
+            blen = len(buf)
+            mem[sidx : sidx + blen] = buf[:]
+            sidx += blen
+
+    @classmethod
+    def _assert_initialized(cls, raw: memoryview | bytes) -> None:
+        if raw[:_PREAMBLE_LEN] != _PREAMBLE:
             raise UninitializedMemory
 
     @classmethod
-    def msg_id(cls, mem: memoryview) -> int | None:
+    def msg_id(cls, raw: memoryview | bytes) -> int:
         """
-        Get msg_id currently written in mem; if uninitialized, return None.
-        
-        :param mem: Memory buffer to read from.
-        :type mem: memoryview
-        :return: Message ID if memory is initialized, None otherwise.
-        :rtype: int | None
+        Get msg_id from a buffer; if uninitialized, return None.
+
+        :param mem: buffer to read from.
+        :type mem: memoryview | bytes
+        :return: Message ID of encoded message
+        :rtype: int
+        :raises UninitializedMemory: If buffer is not initialized.
         """
-        try:
-            cls._assert_initialized(mem)
-            return bytes_to_uint(mem[_PREAMBLE_LEN : _PREAMBLE_LEN + UINT64_SIZE])
-        except UninitializedMemory:
-            return None
+        cls._assert_initialized(raw)
+        return bytes_to_uint(raw[_PREAMBLE_LEN : _PREAMBLE_LEN + UINT64_SIZE])
 
     @classmethod
     @contextmanager
     def obj_from_mem(cls, mem: memoryview) -> Generator[Any, None, None]:
         """
         Deserialize an object from a memory buffer.
-        
+
         Provides a context manager for safe access to deserialized objects
         with automatic cleanup of memory views.
-        
+
         :param mem: Memory buffer containing serialized object.
         :type mem: memoryview
         :return: Context manager yielding the deserialized object.
@@ -118,6 +123,9 @@ class Marshal:
 
         sidx = _PREAMBLE_LEN + UINT64_SIZE
         num_buffers = bytes_to_uint(mem[sidx : sidx + UINT64_SIZE])
+        if num_buffers == 0:
+            raise ValueError("invalid message in memory")
+
         sidx += UINT64_SIZE
         buf_sizes = [0] * num_buffers
         for i in range(num_buffers):
@@ -145,10 +153,10 @@ class Marshal:
     ) -> Generator[tuple[int, bytes, list[memoryview]], None, None]:
         """
         Serialize an object for network transmission.
-        
+
         Creates a complete serialization package with header and buffers
         suitable for network transmission.
-        
+
         :param msg_id: Unique message identifier.
         :type msg_id: int
         :param obj: Object to serialize.
@@ -174,7 +182,7 @@ class Marshal:
     def dump(obj: Any) -> list[memoryview]:
         """
         Serialize an object to a list of memory buffers using pickle.
-        
+
         :param obj: Object to serialize.
         :type obj: Any
         :return: List of memory views containing serialized data.
@@ -189,7 +197,7 @@ class Marshal:
     def load(buffers: list[memoryview]) -> Any:
         """
         Deserialize an object from a list of memory buffers using pickle.
-        
+
         :param buffers: List of memory views containing serialized data.
         :type buffers: list[memoryview]
         :return: Deserialized object.
@@ -201,16 +209,19 @@ class Marshal:
     def copy_obj(cls, from_mem: memoryview, to_mem: memoryview) -> None:
         """
         Copy obj in from_mem (if initialized) to to_mem.
-        
+
         :param from_mem: Source memory buffer containing serialized object.
         :type from_mem: memoryview
         :param to_mem: Target memory buffer for copying.
         :type to_mem: memoryview
+        :raises UninitializedMemory: If from_mem buffer is not properly initialized.
         """
         msg_id = cls.msg_id(from_mem)
-        if msg_id is not None:
-            with MessageMarshal.obj_from_mem(from_mem) as obj:
-                MessageMarshal.to_mem(msg_id, obj, to_mem)
+        with MessageMarshal.obj_from_mem(from_mem) as obj:
+            MessageMarshal.to_mem(msg_id, obj, to_mem)
 
 
+# If some other byte-level representation is desired, you can just
+# monkeypatch the module at runtime with a different Marhsal subclass
+# TODO: This could also be done with environment variables
 MessageMarshal = Marshal

@@ -20,6 +20,28 @@ simple_graph_2 = [("w", "x"), ("w", "y"), ("x", "z"), ("y", "z")]
 
 
 @pytest.mark.asyncio
+async def test_pub_first():
+    async with GraphContext() as context:
+        await context.publisher("a")
+        await asyncio.sleep(0.1)
+        await context.connect("a", "b")
+        await asyncio.sleep(0.1)
+        await context.subscriber("b")
+        await asyncio.sleep(0.1)
+
+
+@pytest.mark.asyncio
+async def test_sub_first():
+    async with GraphContext() as context:
+        await context.subscriber("b")
+        await asyncio.sleep(0.1)
+        await context.connect("a", "b")
+        await asyncio.sleep(0.1)
+        await context.publisher("a")
+        await asyncio.sleep(0.1)
+
+
+@pytest.mark.asyncio
 async def test_graph():
     async with GraphContext() as context:
         await context.publisher("a")
@@ -28,8 +50,12 @@ async def test_graph():
         for edge in simple_graph_1:
             await context.connect(*edge)
 
+        await asyncio.sleep(0.1)
+
         await context.subscriber("c")
         await context.publisher("b")
+
+        await asyncio.sleep(0.1)
 
         for edge in simple_graph_2:
             await context.connect(*edge)
@@ -51,6 +77,18 @@ async def test_graph():
 
         with pytest.raises(CyclicException):
             await context.connect("c", "a")
+
+
+@pytest.mark.asyncio
+async def test_comms_simple():
+    async with GraphContext() as context:
+        b_sub = await context.subscriber("b")
+        await context.connect("a", "b")
+        a_pub = await context.publisher("a")
+        await a_pub.broadcast("HELLO")
+        print("DONE BROADCASTING")
+        msg = await b_sub.recv()
+        assert msg == "HELLO"
 
 
 @pytest.mark.asyncio
@@ -192,8 +230,8 @@ class Sender(AsyncProcess):
             if start is not None:
                 delta = time.perf_counter() - start
                 message_rate = int(self.n_msgs / delta)
-                print(f"{ message_rate } msgs/sec")
-                print(f"{ msg_size * message_rate / 1024 / 1024 / 1024 } GB/sec")
+                print(f"{message_rate} msgs/sec")
+                print(f"{msg_size * message_rate / 1024 / 1024 / 1024} GB/sec")
 
             await asyncio.get_running_loop().run_in_executor(
                 None, self.stop_barrier.wait

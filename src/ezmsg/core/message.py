@@ -25,14 +25,15 @@ class MessageMeta(ABCMeta):
 class Message(ABC, metaclass=MessageMeta):
     """
     Deprecated base class for messages in the ezmsg framework.
-    
+
     .. deprecated::
        Message is deprecated. Use @dataclass decorators instead of inheriting
-       from ez.Message. For data arrays, use :obj:`ezmsg.util.messages.AxisArray`. 
-    
+       from ez.Message. For data arrays, use :obj:`ezmsg.util.messages.AxisArray`.
+
     .. note::
        This class will issue a DeprecationWarning when instantiated.
     """
+
     def __init__(self):
         warnings.warn(
             "Message is deprecated. Replace ez.Message with @dataclass decorators",
@@ -45,10 +46,9 @@ class Message(ABC, metaclass=MessageMeta):
 class Flag:
     """
     A message with no contents.
-    
+
     Flag is used as a simple signal message that carries no data,
     typically used for synchronization or simple event notification.
     """
 
     ...
-

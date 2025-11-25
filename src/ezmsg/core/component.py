@@ -98,16 +98,16 @@ class ComponentMeta(ABCMeta):
 class Component(Addressable, metaclass=ComponentMeta):
     """
     Metaclass which :obj:`Unit` and :obj:`Collection` inherit from.
-    
+
     The Component class provides the foundation for all components in the ezmsg framework,
     including Units and Collections. It manages settings, state, streams, and provides
     the basic infrastructure for message-passing components.
-    
+
     :param settings: Optional settings object for component configuration
     :type settings: Settings | None
 
     .. note::
-    
+
         When creating ezmsg nodes, inherit directly from :obj:`Unit` or :obj:`Collection`.
     """
 
@@ -193,7 +193,7 @@ class Component(Addressable, metaclass=ComponentMeta):
     def tasks(self) -> dict[str, Callable]:
         """
         Get the dictionary of tasks for this component.
-        
+
         :return: Dictionary mapping task names to their callable functions
         :rtype: dict[str, collections.abc.Callable]
         """
@@ -203,7 +203,7 @@ class Component(Addressable, metaclass=ComponentMeta):
     def streams(self) -> dict[str, Stream]:
         """
         Get the dictionary of streams for this component.
-        
+
         :return: Dictionary mapping stream names to their Stream objects
         :rtype: dict[str, Stream]
         """
@@ -213,7 +213,7 @@ class Component(Addressable, metaclass=ComponentMeta):
     def components(self) -> dict[str, "Component"]:
         """
         Get the dictionary of child components for this component.
-        
+
         :return: Dictionary mapping component names to their Component objects
         :rtype: dict[str, Component]
         """
@@ -223,7 +223,7 @@ class Component(Addressable, metaclass=ComponentMeta):
     def main(self) -> Callable[..., None] | None:
         """
         Get the main function for this component.
-        
+
         :return: The main callable function, or None if not set
         :rtype: collections.abc.Callable[..., None] | None
         """
@@ -233,7 +233,7 @@ class Component(Addressable, metaclass=ComponentMeta):
     def threads(self) -> dict[str, Callable]:
         """
         Get the dictionary of thread functions for this component.
-        
+
         :return: Dictionary mapping thread names to their callable functions
         :rtype: dict[str, collections.abc.Callable]
         """

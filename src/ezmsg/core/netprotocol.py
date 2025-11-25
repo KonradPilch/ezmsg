@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 import socket
 import typing
 import enum
+import os
 
 from uuid import UUID
 from dataclasses import field, dataclass
@@ -27,14 +28,19 @@ SERVER_PORT_START_DEFAULT = 10000
 PUBLISHER_START_PORT_ENV = "EZMSG_PUBLISHER_PORT_START"
 PUBLISHER_START_PORT_DEFAULT = 25980
 
+GRAPHSERVER_ADDR = os.environ.get(
+    GRAPHSERVER_ADDR_ENV, f"{DEFAULT_HOST}:{GRAPHSERVER_PORT_DEFAULT}"
+)
+
 
 class Address(typing.NamedTuple):
     """
     Network address representation with host and port.
-    
+
     Provides utility methods for address parsing, serialization,
     and socket binding operations.
     """
+
     host: str
     port: int
 
@@ -42,7 +48,7 @@ class Address(typing.NamedTuple):
     async def from_stream(cls, reader: asyncio.StreamReader) -> "Address":
         """
         Read an Address from an async stream.
-        
+
         :param reader: Stream reader to read address string from.
         :type reader: asyncio.StreamReader
         :return: Parsed Address instance.
@@ -55,7 +61,7 @@ class Address(typing.NamedTuple):
     def from_string(cls, address: str) -> "Address":
         """
         Parse an Address from a string representation.
-        
+
         :param address: Address string in "host:port" format.
         :type address: str
         :return: Parsed Address instance.
@@ -67,7 +73,7 @@ class Address(typing.NamedTuple):
     def to_stream(self, writer: asyncio.StreamWriter) -> None:
         """
         Write this address to an async stream.
-        
+
         :param writer: Stream writer to send address string to.
         :type writer: asyncio.StreamWriter
         """
@@ -76,7 +82,7 @@ class Address(typing.NamedTuple):
     def bind_socket(self) -> socket.socket:
         """
         Create and bind a socket to this address.
-        
+
         :return: Socket bound to this address.
         :rtype: socket.socket
         :raises IOError: If no free ports are available.
@@ -94,14 +100,13 @@ AddressType = tuple[str, int] | Address
 class ClientInfo:
     """
     Base information for client connections.
-    
+
     Tracks client identification, communication writer, and provides
     synchronized access to the writer for thread-safe operations.
     """
+
     id: UUID
     writer: asyncio.StreamWriter
-    pid: int
-    topic: str
 
     _pending: asyncio.Event = field(default_factory=asyncio.Event, init=False)
 
@@ -115,17 +120,16 @@ class ClientInfo:
     async def sync_writer(self) -> AsyncGenerator[asyncio.StreamWriter, None]:
         """
         Get synchronized access to the writer.
-        
+
         Ensures thread-safe access to the stream writer by coordinating
         access through an asyncio Event mechanism.
-        
+
         :return: Context manager yielding the synchronized writer.
         :rtype: collections.abc.AsyncGenerator[asyncio.StreamWriter, None]
         """
         await self._pending.wait()
         try:
             yield self.writer
-            await self.writer.drain()
             self._pending.clear()
             await self._pending.wait()
         finally:
@@ -136,24 +140,35 @@ class ClientInfo:
 class PublisherInfo(ClientInfo):
     """
     Publisher-specific client information.
-    
     Extends ClientInfo with the publisher's network address.
     """
+
+    topic: str
     address: Address
 
 
 @dataclass
 class SubscriberInfo(ClientInfo):
     """
-    Subscriber-specific client information. 
+    Subscriber-specific client information.
     """
-    shm_access: bool = False
+
+    topic: str
+
+
+@dataclass
+class ChannelInfo(ClientInfo):
+    """
+    Channel-specific client information.
+    """
+
+    pub_id: UUID
 
 
 def uint64_to_bytes(i: int) -> bytes:
     """
     Convert a 64-bit unsigned integer to bytes.
-    
+
     :param i: Integer value to convert.
     :type i: int
     :return: Byte representation in little-endian format.
@@ -165,7 +180,7 @@ def uint64_to_bytes(i: int) -> bytes:
 def bytes_to_uint(b: bytes) -> int:
     """
     Convert bytes to a 64-bit unsigned integer.
-    
+
     :param b: Byte data to convert.
     :type b: bytes
     :return: Integer value decoded from little-endian bytes.
@@ -177,7 +192,7 @@ def bytes_to_uint(b: bytes) -> int:
 def encode_str(string: str) -> bytes:
     """
     Encode a string with length prefix for network transmission.
-    
+
     :param string: String to encode.
     :type string: str
     :return: Length-prefixed UTF-8 encoded bytes.
@@ -191,7 +206,7 @@ def encode_str(string: str) -> bytes:
 async def read_int(reader: asyncio.StreamReader) -> int:
     """
     Read a 64-bit unsigned integer from an async stream.
-    
+
     :param reader: Stream reader to read from.
     :type reader: asyncio.StreamReader
     :return: Integer value read from stream.
@@ -231,16 +246,16 @@ async def close_server(server: Server):
 class Command(enum.Enum):
     """
     Enumeration of protocol commands for ezmsg network communication.
-    
+
     Defines all command types used in the ezmsg protocol for graph management,
     publisher-subscriber communication, and shared memory operations.
     """
-    
+
     @staticmethod
     def _generate_next_value_(name, start, count, last_values) -> bytes:
         """
         Generate byte values for enum members.
-        
+
         :param name: Name of the enum member.
         :type name: str
         :param start: Starting value (unused).
@@ -278,6 +293,10 @@ class Command(enum.Enum):
 
     SHUTDOWN = enum.auto()
 
+    CHANNEL = enum.auto()
+    SHM_OK = enum.auto()
+    SHM_ATTACH_FAILED = enum.auto()
+
 
 def create_socket(
     host: str | None = None,
@@ -288,10 +307,10 @@ def create_socket(
 ) -> socket.socket:
     """
     Create a socket bound to an available port.
-    
+
     Attempts to bind to the specified port, or searches for an available
     port within the given range if no specific port is provided.
-    
+
     :param host: Host address to bind to (defaults to DEFAULT_HOST).
     :type host: str | None
     :param port: Specific port to bind to (if None, searches for available port).
@@ -306,24 +325,31 @@ def create_socket(
     :rtype: socket.socket
     :raises IOError: If no available ports can be found in the specified range.
     """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     if host is None:
         host = DEFAULT_HOST
 
     if port is not None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # set REUSEADDR if a port is explicitly requested; leads to quick server restart on same port
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.bind((host, port))
         return sock
 
     port = start_port
     while port <= max_port:
         if port not in ignore_ports:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
+                # setting REUSEADDR during portscan can lead to race conditions during bind on Linux
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 sock.bind((host, port))
                 return sock
             except OSError:
+                sock.close()
                 pass
+
         port += 1
 
     raise IOError("Failed to bind socket; no free ports")

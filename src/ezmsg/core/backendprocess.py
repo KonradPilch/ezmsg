@@ -6,6 +6,7 @@ import time
 import traceback
 import threading
 
+from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Coroutine, Generator, Sequence
 from functools import wraps, partial
@@ -21,11 +22,9 @@ from .stream import Stream, InputStream, OutputStream
 from .unit import Unit, TIMEIT_ATTR, SUBSCRIBES_ATTR, ZERO_COPY_ATTR
 
 from .graphcontext import GraphContext
-from .graphserver import GraphService
 from .pubclient import Publisher
 from .subclient import Subscriber
-from .messagecache import MessageCache
-from abc import abstractmethod
+from .netprotocol import AddressType
 
 logger = logging.getLogger("ezmsg")
 
@@ -34,7 +33,7 @@ class Complete(Exception):
     """
     A type of Exception raised by Unit methods, which signals to ezmsg that the
     function can be shut down gracefully.
-    
+
     If all functions in all Units raise Complete, the entire pipeline will
     terminate execution. This exception is used to signal normal completion
     of processing tasks.
@@ -49,7 +48,7 @@ class Complete(Exception):
 class NormalTermination(Exception):
     """
     A type of Exception which signals to ezmsg that the pipeline can be shut down gracefully.
-    
+
     This exception is used to indicate that the system should terminate normally,
     typically when all processing is complete or when a graceful shutdown is requested.
 
@@ -63,16 +62,17 @@ class NormalTermination(Exception):
 class BackendProcess(Process):
     """
     Abstract base class for backend processes that execute Units.
-    
+
     BackendProcess manages the execution of Units in a separate process,
     handling initialization, coordination with other processes via barriers,
     and cleanup operations.
     """
+
     units: list[Unit]
     term_ev: EventType
     start_barrier: BarrierType
     stop_barrier: BarrierType
-    graph_service: GraphService
+    graph_address: AddressType | None
 
     def __init__(
         self,
@@ -80,11 +80,11 @@ class BackendProcess(Process):
         term_ev: EventType,
         start_barrier: BarrierType,
         stop_barrier: BarrierType,
-        graph_service: GraphService,
+        graph_address: AddressType | None,
     ) -> None:
         """
         Initialize the backend process.
-        
+
         :param units: List of Units to execute in this process.
         :type units: list[Unit]
         :param term_ev: Event for coordinated termination.
@@ -103,13 +103,13 @@ class BackendProcess(Process):
         self.term_ev = term_ev
         self.start_barrier = start_barrier
         self.stop_barrier = stop_barrier
-        self.graph_service = graph_service
+        self.graph_address = graph_address
         self.task_finished_ev: threading.Event | None = None
 
     def run(self) -> None:
         """
         Main entry point for the process execution.
-        
+
         Sets up the event loop and handles the main processing logic
         with proper exception handling for interrupts.
         """
@@ -124,10 +124,10 @@ class BackendProcess(Process):
     def process(self, loop: asyncio.AbstractEventLoop) -> None:
         """
         Abstract method for implementing the main processing logic.
-        
+
         Subclasses must implement this method to define how Units
         are executed within the event loop.
-        
+
         :param loop: The asyncio event loop for this process.
         :type loop: asyncio.AbstractEventLoop
         :raises NotImplementedError: Must be implemented by subclasses.
@@ -138,16 +138,17 @@ class BackendProcess(Process):
 class DefaultBackendProcess(BackendProcess):
     """
     Default implementation of BackendProcess for executing Units.
-    
+
     This class provides the standard execution model for ezmsg Units,
     handling publishers, subscribers, and the complete Unit lifecycle
     including initialization, execution, and shutdown.
     """
+
     pubs: dict[str, Publisher]
 
     def process(self, loop: asyncio.AbstractEventLoop) -> None:
         main_func = None
-        context = GraphContext(self.graph_service)
+        context = GraphContext(self.graph_address)
         coro_callables: dict[str, Callable[[], Coroutine[Any, Any, None]]] = dict()
 
         try:
@@ -229,11 +230,9 @@ class DefaultBackendProcess(BackendProcess):
             logger.debug("Waiting at start barrier!")
             self.start_barrier.wait()
 
-            threads = [
-                loop.run_in_executor(None, thread_fn, unit)
-                for unit in self.units
-                for thread_fn in unit.threads.values()
-            ]
+            for unit in self.units:
+                for thread_fn in unit.threads.values():
+                    loop.run_in_executor(None, thread_fn, unit)
 
             for pub in self.pubs.values():
                 pub.resume()
@@ -306,8 +305,8 @@ class DefaultBackendProcess(BackendProcess):
 
             asyncio.run_coroutine_threadsafe(shutdown_units(), loop=loop).result()
 
-            for cache in MessageCache.values():
-                cache.clear()
+            # for cache in MessageCache.values():
+            #     cache.clear()
 
             asyncio.run_coroutine_threadsafe(context.revert(), loop=loop).result()
 
@@ -397,11 +396,11 @@ async def handle_subscriber(
 ):
     """
     Handle incoming messages from a subscriber and distribute to callables.
-    
+
     Continuously receives messages from the subscriber and calls all registered
     callables with each message. Removes callables that raise Complete or
     NormalTermination exceptions.
-    
+
     :param sub: Subscriber to receive messages from.
     :type sub: Subscriber
     :param callables: Set of async callables to invoke with messages.
@@ -429,10 +428,10 @@ async def handle_subscriber(
 def run_loop(loop: asyncio.AbstractEventLoop):
     """
     Run an asyncio event loop in the current thread.
-    
+
     Sets the event loop for the current thread and runs it forever
     until interrupted or stopped.
-    
+
     :param loop: The asyncio event loop to run.
     :type loop: asyncio.AbstractEventLoop
     """
@@ -449,10 +448,10 @@ def new_threaded_event_loop(
 ) -> Generator[asyncio.AbstractEventLoop, None, None]:
     """
     Create a new asyncio event loop running in a separate thread.
-    
+
     Provides a context manager that yields an event loop running in its own
     thread, allowing async operations to be run from synchronous code.
-    
+
     :param ev: Optional event to signal when the loop is ready.
     :type ev: threading.Event | None
     :return: Context manager yielding the event loop.

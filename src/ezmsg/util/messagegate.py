@@ -9,7 +9,7 @@ import ezmsg.core as ez
 class GateMessage:
     """
     Send this message to ``INPUT_GATE`` to open or close the gate.
-    
+
     :param open: True to open the gate (allow messages), False to close it (discard messages)
     :type open: bool
     """
@@ -66,7 +66,7 @@ class MessageGate(ez.Unit):
     def set_gate(self, set_open: bool) -> None:
         """
         Set the gate open/closed state and reset message counter.
-        
+
         :param set_open: True to open gate, False to close it
         :type set_open: bool
         """

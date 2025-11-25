@@ -24,6 +24,7 @@ dev = [
   {include-group = "lint"},
   {include-group = "test"},
   "pre-commit>=4.3.0",
+  "viztracer>=1.0.4",
 ]
 lint = [
     "flake8>=7.3.0",
@@ -35,6 +36,7 @@ test = [
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
     "xarray>=2025.6.1",
+    "psutil>=7.1.0",
 ]
 docs = [
   {include-group = "axisarray"},
@@ -51,6 +53,7 @@ axisarray = [
 
 [project.scripts]
 ezmsg = "ezmsg.core.command:cmdline"
+ezmsg-perf = "ezmsg.util.perf.command:command"
 
 [project.optional-dependencies]
 axisarray = [

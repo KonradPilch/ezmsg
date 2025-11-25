@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator, Generator
 import traceback
-import typing
 
 import numpy as np
 
@@ -60,23 +59,25 @@ def modify_axis(
 class ModifyAxisSettings(ez.Settings):
     """
     Settings for ModifyAxis unit.
-    
+
     Configuration for modifying axis names and dimensions of AxisArray messages.
 
     :param name_map: A dictionary where the keys are the names of the old dims and the values are the new names.
         Use None as a value to drop the dimension. If the dropped dimension is not len==1 then an error is raised.
     :type name_map: dict[str, str | None] | None
     """
+
     name_map: dict[str, str | None] | None = None
 
 
 class ModifyAxis(ez.Unit):
     """
     Unit for modifying axis names and dimensions of AxisArray messages.
-    
+
     Renames dimensions and axes according to a name mapping, with support for
     dropping dimensions. Uses zero-copy operations for efficient processing.
     """
+
     STATE = GenState
     SETTINGS = ModifyAxisSettings
 
@@ -87,7 +88,7 @@ class ModifyAxis(ez.Unit):
     async def initialize(self) -> None:
         """
         Initialize the ModifyAxis unit.
-        
+
         Sets up the generator for axis modification operations.
         """
         self.construct_generator()
@@ -95,7 +96,7 @@ class ModifyAxis(ez.Unit):
     def construct_generator(self):
         """
         Construct the axis-modifying generator with current settings.
-        
+
         Creates a new modify_axis generator instance using the unit's name mapping.
         """
         self.STATE.gen = modify_axis(name_map=self.SETTINGS.name_map)
@@ -104,7 +105,7 @@ class ModifyAxis(ez.Unit):
     async def on_settings(self, msg: ez.Settings) -> None:
         """
         Handle incoming settings updates.
-        
+
         :param msg: New settings to apply.
         :type msg: ez.Settings
         """
@@ -116,10 +117,10 @@ class ModifyAxis(ez.Unit):
     async def on_message(self, message: AxisArray) -> AsyncGenerator:
         """
         Process incoming AxisArray messages and modify their axes.
-        
+
         Uses zero-copy operations to efficiently modify axis names and dimensions
         while preserving data integrity.
-        
+
         :param message: Input AxisArray to modify.
         :type message: AxisArray
         :return: Async generator yielding AxisArray with modified axes.

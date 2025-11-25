@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator, Generator
 import traceback
-import typing
 
 import numpy as np
 
@@ -32,22 +31,24 @@ def set_key(key: str = "") -> Generator[AxisArray, AxisArray, None]:
 class KeySettings(ez.Settings):
     """
     Settings for key manipulation units.
-    
+
     Configuration for setting or filtering AxisArray keys.
-    
+
     :param key: The string to set as the key.
     :type key: str
     """
+
     key: str = ""
 
 
 class SetKey(ez.Unit):
     """
     Unit for setting the key of incoming AxisArray messages.
-    
+
     Modifies the key field of AxisArray messages while preserving all other data.
     Uses zero-copy operations for efficient processing.
     """
+
     STATE = GenState
     SETTINGS = KeySettings
 
@@ -58,7 +59,7 @@ class SetKey(ez.Unit):
     async def initialize(self) -> None:
         """
         Initialize the SetKey unit.
-        
+
         Sets up the generator for key modification operations.
         """
         self.construct_generator()
@@ -66,7 +67,7 @@ class SetKey(ez.Unit):
     def construct_generator(self):
         """
         Construct the key-setting generator with current settings.
-        
+
         Creates a new set_key generator instance using the unit's key setting.
         """
         self.STATE.gen = set_key(key=self.SETTINGS.key)
@@ -75,7 +76,7 @@ class SetKey(ez.Unit):
     async def on_settings(self, msg: ez.Settings) -> None:
         """
         Handle incoming settings updates.
-        
+
         :param msg: New settings to apply.
         :type msg: ez.Settings
         """
@@ -87,10 +88,10 @@ class SetKey(ez.Unit):
     async def on_message(self, message: AxisArray) -> AsyncGenerator:
         """
         Process incoming AxisArray messages and set their keys.
-        
+
         Uses zero-copy operations to efficiently modify the key field while
         preserving all other data.
-        
+
         :param message: Input AxisArray to modify.
         :type message: AxisArray
         :return: Async generator yielding AxisArray with modified key.
@@ -109,10 +110,10 @@ class SetKey(ez.Unit):
 class FilterOnKey(ez.Unit):
     """
     Filter an AxisArray based on its key.
-    
+
     Only passes through AxisArray messages whose key matches the configured key setting.
     Uses zero-copy operations for efficient filtering.
-    
+
     Note: There is no associated generator method for this Unit because messages that fail the filter
     would still be yielded (as None), which complicates downstream processing. For contexts where filtering
     on key is desired but the ezmsg framework is not used, use normal Python functional programming.
@@ -129,10 +130,10 @@ class FilterOnKey(ez.Unit):
     async def on_message(self, message: AxisArray) -> AsyncGenerator:
         """
         Filter incoming AxisArray messages based on their key.
-        
+
         Only yields messages whose key matches the configured filter key.
         Uses minimal 'touch' to prevent unnecessary deep copying by the framework.
-        
+
         :param message: Input AxisArray to filter.
         :type message: AxisArray
         :return: Async generator yielding filtered AxisArray messages.

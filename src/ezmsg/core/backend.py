@@ -32,47 +32,56 @@ logger = logging.getLogger("ezmsg")
 
 
 class ExecutionContext:
-    processes: list[BackendProcess]
+    _process_units: list[list[Unit]]
+    _processes: list[BackendProcess] | None
+
     term_ev: EventType
     start_barrier: BarrierType
     connections: list[tuple[str, str]]
 
     def __init__(
         self,
-        processes: list[list[Unit]],
-        graph_service: GraphService,
+        process_units: list[list[Unit]],
         connections: list[tuple[str, str]] = [],
-        backend_process: type[BackendProcess] = DefaultBackendProcess,
     ) -> None:
-        if not processes:
-            raise ValueError("Cannot create an execution context for zero processes")
-
         self.connections = connections
+        self._process_units = process_units
+        self._processes = None
 
         self.term_ev = Event()
-        self.start_barrier = Barrier(len(processes))
-        self.stop_barrier = Barrier(len(processes))
+        self.start_barrier = Barrier(len(process_units))
+        self.stop_barrier = Barrier(len(process_units))
 
-        self.processes = [
+    def create_processes(
+        self,
+        graph_address: AddressType | None,
+        backend_process: type[BackendProcess] = DefaultBackendProcess,
+    ) -> None:
+        self._processes = [
             backend_process(
                 process_units,
                 self.term_ev,
                 self.start_barrier,
                 self.stop_barrier,
-                graph_service,
+                graph_address,
             )
-            for process_units in processes
+            for process_units in self._process_units
         ]
+
+    @property
+    def processes(self) -> list[BackendProcess]:
+        if self._processes is None:
+            raise ValueError("ExecutionContext has not initialized processes")
+        else:
+            return self._processes
 
     @classmethod
     def setup(
         cls,
         components: Mapping[str, Component],
-        graph_service: GraphService,
         root_name: str | None = None,
         connections: NetworkDefinition | None = None,
         process_components: AbstractCollection[Component] | None = None,
-        backend_process: type[BackendProcess] = DefaultBackendProcess,
         force_single_process: bool = False,
     ) -> "ExecutionContext | None":
         graph_connections: list[tuple[str, str]] = []
@@ -133,15 +142,13 @@ class ExecutionContext:
         if force_single_process:
             processes = [[u for pu in processes for u in pu]]
 
-        try:
-            return cls(
-                processes,
-                graph_service,
-                graph_connections,
-                backend_process,
-            )
-        except ValueError:
+        if not processes:
             return None
+
+        return cls(
+            processes,
+            graph_connections,
+        )
 
 
 def run_system(
@@ -152,8 +159,8 @@ def run_system(
 ) -> None:
     """
     Deprecated function for running a system (Collection).
-    
-    .. deprecated:: 
+
+    .. deprecated::
        Use :func:`run` instead to run any component (unit, collection).
 
     :param system: The collection to run
@@ -184,9 +191,9 @@ def run(
 
     This is the main entry point for running ezmsg applications. It sets up the
     execution environment, initializes components, and manages the message-passing
-    infrastructure. 
+    infrastructure.
 
-    On initialization, ezmsg will call ``initialize()`` for each :obj:`Unit` and 
+    On initialization, ezmsg will call ``initialize()`` for each :obj:`Unit` and
     ``configure()`` for each :obj:`Collection`, if defined. On initialization, ezmsg
     will create a directed acyclic graph using the contents of ``connections``.
 
@@ -210,16 +217,15 @@ def run(
     :param components_kwargs: Additional components specified as keyword arguments
     :type components_kwargs: Component
 
-    .. note:: 
+    .. note::
        Since jupyter notebooks run in a single process, you must set `force_single_process=True`.
-    
+
     .. note::
        The old method :obj:`run_system` has been deprecated and uses ``run()`` instead.
     """
     os.environ["EZMSG_PROFILER"] = profiler_log_name or "ezprofiler.log"
     # FIXME: This function is the last major re-implementation needed to make this
     # codebase more maintainable.
-    graph_service = GraphService(graph_address)
 
     if components is not None and isinstance(components, Component):
         components = {"SYSTEM": components}
@@ -233,11 +239,9 @@ def run(
     with new_threaded_event_loop() as loop:
         execution_context = ExecutionContext.setup(
             components,
-            graph_service,
             root_name,
             connections,
             process_components,
-            backend_process,
             force_single_process,
         )
 
@@ -246,7 +250,7 @@ def run(
 
         # FIXME: When done this way, we don't exit the graph_context on exception
         async def create_graph_context() -> GraphContext:
-            return await GraphContext(graph_service).__aenter__()
+            return await GraphContext(graph_address).__aenter__()
 
         # FIXME: This sort of stuff should all be done in a separate async function...
         # Done this way, its ugly as hell and opens us up to a lot of issues with
@@ -254,6 +258,18 @@ def run(
         graph_context = asyncio.run_coroutine_threadsafe(
             create_graph_context(), loop
         ).result()
+
+        if graph_context._graph_server is None:
+            address = graph_context.graph_address
+            if address is None:
+                address = GraphService.default_address()
+            logger.info(f"Connected to GraphServer @ {address}")
+        else:
+            logger.info(f"Spawned GraphServer @ {graph_context.graph_address}")
+
+        execution_context.create_processes(
+            graph_address=graph_context.graph_address, backend_process=backend_process
+        )
 
         async def cleanup_graph() -> None:
             await graph_context.__aexit__(None, None, None)

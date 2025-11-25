@@ -1,15 +1,6 @@
-import logging
+import typing
 
-from uuid import UUID
-from contextlib import contextmanager
-
-from .shm import SHMContext
-from .messagemarshal import MessageMarshal, UninitializedMemory
-
-from collections.abc import Generator
-from typing import Any
-
-logger = logging.getLogger("ezmsg")
+from .messagemarshal import MessageMarshal
 
 
 class CacheMiss(Exception): 
@@ -19,21 +10,24 @@ class CacheMiss(Exception):
     This occurs when trying to retrieve a message that has been evicted
     from the cache or was never stored in the first place.
     """
-    ...
 
 
-class Cache:
+class CacheEntry(typing.NamedTuple):
+    object: typing.Any
+    msg_id: int
+    context: typing.ContextManager | None
+    memory: memoryview | None
+
+
+class MessageCache:
     """
-    Shared-memory backed cache for objects.
+    Cache for memoryview-backed objects.
     
-    Provides a buffer cache that can store objects both in memory
-    and in shared memory buffers, enabling efficient message passing between
+    Provides a buffer cache that can store objects in memory 
+    enabling efficient message passing between
     processes with automatic eviction based on buffer age.
     """
-
-    num_buffers: int
-    cache: list[Any]
-    cache_id: list[int | None]
+    _cache: list[CacheEntry | None]
 
     def __init__(self, num_buffers: int) -> None:
         """
@@ -42,92 +36,103 @@ class Cache:
         :param num_buffers: Number of cache buffers to maintain.
         :type num_buffers: int
         """
-        self.num_buffers = num_buffers
-        self.cache_id = [None] * self.num_buffers
-        self.cache = [None] * self.num_buffers
+        self._cache = [None] * num_buffers
 
-    def put(self, msg_id: int, msg: Any) -> None:
+    def _buf_idx(self, msg_id: int) -> int:
+        return msg_id % len(self._cache)
+
+    def __getitem__(self, msg_id: int) -> typing.Any:
         """
-        Put an object into cache at the position determined by message ID.
-        
-        :param msg_id: Unique message identifier.
+        Get a cached object by msg_id
+
+        :param msg_id: Message ID to retreive from cache
         :type msg_id: int
-        :param msg: The message object to cache.
-        :type msg: Any
+        :raises CacheMiss: If this msg_id does not exist in the cache.
         """
-        buf_idx = msg_id % self.num_buffers
-        self.cache_id[buf_idx] = msg_id
-        self.cache[buf_idx] = msg
+        entry = self._cache[self._buf_idx(msg_id)]
+        if entry is None or entry.msg_id != msg_id:
+            raise CacheMiss
+        return entry.object
 
-    def push(self, msg_id: int, shm: SHMContext) -> None:
+    def keys(self) -> list[int]:
         """
-        Push an object from cache into shared memory.
-        
-        If the message is not already in shared memory with the correct ID,
-        retrieves it from cache and serializes it to the shared memory buffer.
-        
-        :param msg_id: Message identifier to push.
+        Get a list of current cached msg_ids
+        """
+        return [entry.msg_id for entry in self._cache if entry is not None]
+
+    def put_local(self, obj: typing.Any, msg_id: int) -> None:
+        """
+        Put an object with associated msg_id directly into cache
+
+        :param obj: Object to put in cache.
+        :type obj: typing.Any
+        :param msg_id: ID associated with this message/object.
         :type msg_id: int
-        :param shm: Shared memory context to write to.
-        :type shm: SHMContext
-        :raises ValueError: If shared memory has wrong number of buffers.
         """
-        if self.num_buffers != shm.num_buffers:
-            raise ValueError("shm has incorrect number of buffers")
+        self._put(
+            CacheEntry(
+                object=obj,
+                msg_id=msg_id,
+                context=None,
+                memory=None,
+            )
+        )
 
-        buf_idx = msg_id % self.num_buffers
-        with shm.buffer(buf_idx) as mem:
-            shm_msg_id = MessageMarshal.msg_id(mem)
-            if shm_msg_id != msg_id:
-                with self.get(msg_id) as obj:
-                    MessageMarshal.to_mem(msg_id, obj, mem)
-
-    @contextmanager
-    def get(
-        self, msg_id: int, shm: SHMContext | None = None
-    ) -> Generator[Any, None, None]:
+    def put_from_mem(self, mem: memoryview) -> None:
         """
-        Get object from cache; if not in cache and shm provided -- get from shm.
-        
-        Provides a context manager for safe access to cached messages. If the
-        message is not in memory cache, attempts to retrieve from shared memory.
-        
-        :param msg_id: Message identifier to retrieve.
+        Reconstitute a message in mem and keep it in cache, releasing and
+        overwriting the existing slot in cache.
+        This method passes the lifecycle of the memoryview to the MessageCache
+        and the memoryview will be properly released by the cache with `free`
+
+        :param mem: Source memoryview containing serialized object.
+        :type from_mem: memoryview
+        :raises UninitializedMemory: If mem buffer is not properly initialized.
+        """
+        ctx = MessageMarshal.obj_from_mem(mem)
+        self._put(
+            CacheEntry(
+                object=ctx.__enter__(),
+                msg_id=MessageMarshal.msg_id(mem),
+                context=ctx,
+                memory=mem,
+            )
+        )
+
+    def _put(self, entry: CacheEntry) -> None:
+        buf_idx = self._buf_idx(entry.msg_id)
+        self._release(buf_idx)
+        self._cache[buf_idx] = entry
+
+    def _release(self, buf_idx: int) -> None:
+        entry = self._cache[buf_idx]
+        if entry is not None:
+            mem = entry.memory
+            ctx = entry.context
+            if ctx is not None:
+                ctx.__exit__(None, None, None)
+            del entry
+            self._cache[buf_idx] = None
+            if mem is not None:
+                mem.release()
+
+    def release(self, msg_id: int) -> None:
+        """
+        Release memory for the entry associated with msg_id
+
+        :param msg_id: ID for the message to release.
         :type msg_id: int
-        :param shm: Optional shared memory context as fallback.
-        :type shm: SHMContext | None
-        :return: Context manager yielding the requested message.
-        :rtype: Generator[Any, None, None]
-        :raises CacheMiss: If message not found in cache or shared memory.
+        :raises CacheMiss: If requested msg_id is not in cache.
         """
+        buf_idx = self._buf_idx(msg_id)
+        entry = self._cache[buf_idx]
+        if entry is None or entry.msg_id != msg_id:
+            raise CacheMiss
+        self._release(buf_idx)
 
-        buf_idx = msg_id % self.num_buffers
-        if self.cache_id[buf_idx] == msg_id:
-            yield self.cache[buf_idx]
-
-        else:
-            if shm is None:
-                raise CacheMiss
-
-            with shm.buffer(buf_idx, readonly=True) as mem:
-                try:
-                    if MessageMarshal.msg_id(mem) != msg_id:
-                        raise CacheMiss
-                except UninitializedMemory:
-                    raise CacheMiss
-
-                with MessageMarshal.obj_from_mem(mem) as obj:
-                    yield obj
-
-    def clear(self):
+    def clear(self) -> None:
         """
-        Clear all cached messages and identifiers.
-        
-        Resets all cache slots to None, effectively clearing the entire cache.
+        Release all cached objects
         """
-        self.cache_id = [None] * self.num_buffers
-        self.cache = [None] * self.num_buffers
-
-
-# FIXME: This should be made thread-safe in the future
-MessageCache: dict[UUID, Cache] = dict()
+        for i in range(len(self._cache)):
+            self._release(i)
